@@ -17,6 +17,9 @@ import { Input } from "@/components/ui/input";
 import { isDesktopApp, pickFiles, pickFolder } from "@/lib/desktop";
 import { cn, normalizeFilePath } from "@/lib/utils";
 
+const TEXTAREA_CLASS =
+  "flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+
 const FLAG_TOKENS = new Set(["forced", "sdh", "cc", "hi", "default", "foreign"]);
 
 function basename(path: string): string {
@@ -299,6 +302,9 @@ export function SubtitleTranslateForm({
   const [sourceLang, setSourceLang] = useState("auto");
   const [targetLang, setTargetLang] = useState("en");
   const [overwrite, setOverwrite] = useState(false);
+  const [removeJunk, setRemoveJunk] = useState(true);
+  const [glossary, setGlossary] = useState("");
+  const [notes, setNotes] = useState("");
   const [languages, setLanguages] = useState<SubtitleLanguage[]>([]);
 
   useEffect(() => {
@@ -320,6 +326,9 @@ export function SubtitleTranslateForm({
     source_lang: sourceLang,
     target_lang: targetLang,
     overwrite,
+    remove_junk: removeJunk,
+    glossary,
+    notes,
     dry_run: dryRun,
   });
 
@@ -340,7 +349,7 @@ export function SubtitleTranslateForm({
           onChange={setSourceLang}
           languages={languages}
           includeAuto
-          hint="Auto reads the language tag from the filename (.en, .de, …)."
+          hint="Auto reads the language tag from the filename (.en, .de, …); without one, the model detects it."
         />
         <LanguageCombobox
           label="Target language"
@@ -357,6 +366,34 @@ export function SubtitleTranslateForm({
         onChange={setOverwrite}
         hint="Replace translated .srt files that already exist."
       />
+
+      <CheckField
+        label="Drop ad and credit lines first"
+        checked={removeJunk}
+        onChange={setRemoveJunk}
+        hint="Removes lines with web addresses, emails, release tags and “subtitles by …” credits before translating."
+      />
+
+      <Field label="Notes for the translator" hint="Optional, e.g. “Teen drama, informal register, keep English names”.">
+        <textarea
+          className={TEXTAREA_CLASS}
+          value={notes}
+          maxLength={1000}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+      </Field>
+
+      <Field
+        label="Glossary"
+        hint="One per line: term = translation. A term on its own is kept untranslated."
+      >
+        <textarea
+          className={cn(TEXTAREA_CLASS, "font-mono")}
+          value={glossary}
+          placeholder={"Hawkins\nUpside Down = De Andere Kant"}
+          onChange={(e) => setGlossary(e.target.value)}
+        />
+      </Field>
 
       <ToolRunActions
         onPreview={() => onRun(runParams(true))}

@@ -1,5 +1,6 @@
 """Subtitle translation: repair loop, validation, cancellation, resume and file handling."""
 
+import argparse
 import logging
 import tempfile
 import unittest
@@ -12,6 +13,12 @@ from core.mods.context import ModCancelled
 from core.subtitles import (
     SubtitleCue,
     TranslationReport,
+    TranslationStyle,
+    char_budget,
+    mask_tags,
+    plan_translation_files,
+    remove_auto_junk,
+    unmask_tags,
     parse_srt,
     process_srt_file,
     read_subtitle_text,
@@ -91,6 +98,37 @@ class RepairLoopTests(unittest.TestCase):
         self.assertEqual(out[0].lines, ["<i>Hallo</i>"])
         self.assertEqual(report.flagged, 0)
 
+    def test_markers_are_sent_and_restored(self):
+        out, provider, report = self.run_batch(
+            [cue(1, "{\\an8}<i>Hello</i>")], [answer("⟦1⟧⟦2⟧Hallo⟦3⟧")]
+        )
+        self.assertEqual(out[0].lines, ["{\\an8}<i>Hallo</i>"])
+        sent = provider.calls[0][1]["content"]
+        self.assertIn("⟦1⟧", sent)
+        self.assertNotIn("<i>", sent.split("Translate ONLY")[1])
+        self.assertEqual(report.flagged, 0)
+
+    def test_style_and_lookahead_reach_the_prompt(self):
+        glossary = "Hawkins = Hawkins\n# comment\nupside down = de Andere Kant"
+        style = TranslationStyle.parse(glossary, "Teen drama")
+        size = subtitles.TRANSLATE_BATCH_SIZE
+        cues = [cue(1, f"Line {i}") for i in range(size + 1)]
+        replies = [answer(*[f"T{i}" for i in range(size)]), answer("Z")]
+        _out, provider, _r = self.run_batch(cues, replies, style=style)
+        first = provider.calls[0][1]["content"]
+        self.assertIn("upside down -> de Andere Kant", first)
+        self.assertIn("Teen drama", first)
+        self.assertIn(f"Line {size}", first.split("Upcoming lines")[1].split("Translate ONLY")[0])
+
+    def test_unknown_source_asks_the_model_to_detect_it(self):
+        _o, provider, _r = self.run_batch([cue(1, "Hello")], [answer("Hallo")])
+        self.assertIn("en", provider.calls[0][0]["content"])
+        provider = Scripted([answer("Hallo")])
+        translate_cues_batch(
+            [cue(1, "Hello")], source_lang="auto", target_lang="nl", model=None, logger=LOG, provider=provider
+        )
+        self.assertIn("detect it yourself", provider.calls[0][0]["content"])
+
     def test_blank_line_inside_a_cue_is_a_problem(self):
         _out, _p, report = self.run_batch([cue(1, "Hello")], [answer("Ha\n\nllo")] * 3)
         self.assertEqual(report.flagged, 1)
@@ -108,6 +146,27 @@ class RepairLoopTests(unittest.TestCase):
         second = provider.calls[1][1]["content"]
         self.assertIn("Previously translated", second)
         self.assertIn(f"T{size - 1}", second)
+
+
+class HelperTests(unittest.TestCase):
+    def test_mask_round_trip(self):
+        masked, tags = mask_tags("<i>Hi</i> {\\an8}there")
+        self.assertEqual(unmask_tags(masked, tags), "<i>Hi</i> {\\an8}there")
+        self.assertNotIn("<", masked)
+
+    def test_char_budget_uses_duration(self):
+        self.assertEqual(char_budget(cue(1, "x")), 17)
+
+    def test_auto_junk_leaves_sound_captions(self):
+        cues = [cue(1, "Hello\nwww.example.com"), cue(2, "[door slams]"), cue(3, "Synced by someone")]
+        cleaned, removed = remove_auto_junk(cues)
+        self.assertEqual(removed, 2)
+        self.assertEqual([c.text for c in cleaned], ["Hello", "[door slams]"])
+
+    def test_folder_plan_skips_target_language_and_duplicates(self):
+        files = [Path("a/Show.de.srt"), Path("a/Show.en.srt"), Path("a/Show.fr.srt")]
+        planned = plan_translation_files(files, "de", LOG)
+        self.assertEqual(planned, [Path("a/Show.en.srt")])
 
 
 class CancelAndResumeTests(unittest.TestCase):
@@ -176,7 +235,7 @@ class FileTests(unittest.TestCase):
                 raise ValueError("boom")
             return path
 
-        args = mock.Mock(
+        args = argparse.Namespace(
             input=self.dir, target_lang="nl", source_lang="en", overwrite=True, dry_run=False, model="m"
         )
         with mock.patch.object(subtitles, "process_srt_file", side_effect=process), mock.patch.object(

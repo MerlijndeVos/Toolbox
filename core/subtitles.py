@@ -28,7 +28,15 @@ from .subtitle_languages import (
 
 SRT_EXTENSION = ".srt"
 TRANSLATE_BATCH_SIZE = 25
-CONTEXT_CUES = 4
+CONTEXT_CUES = 8
+LOOKAHEAD_CUES = 3
+# Reading speed the per-cue character budget is derived from (characters per second).
+TARGET_CPS = 17
+PLACEHOLDER_RE = re.compile(r"\u27e6\d+\u27e7")
+TIME_RE = re.compile(r"(\d+):(\d+):(\d+)[,.](\d+)")
+# Junk reasons removed automatically before translating. Bracket lines are left alone: they are
+# often legitimate sound captions such as [door slams].
+AUTO_JUNK_REASONS = {"url", "email", "credit_line", "release_tag"}
 # Requests per batch: the whole batch, then only the cues that failed, then one cue at a time.
 MAX_REPAIR_ATTEMPTS = 3
 TRANSLATE_TEMPERATURE = 0.15
@@ -109,14 +117,14 @@ def detect_lang_from_path(path: Path) -> Optional[str]:
 
 
 def resolve_source_lang(path: Path, source_lang: str) -> str:
-    """Resolve 'auto' to a filename token or fall back to English."""
+    """Resolve 'auto' to a filename token. With none, stay 'auto' and let the model detect it."""
     if source_lang and source_lang.lower() != "auto":
         code = normalize_lang_code(source_lang)
         if code:
             return code
         return source_lang.lower()
     detected = detect_lang_from_path(path)
-    return detected or "en"
+    return detected or "auto"
 
 
 def build_output_path(src: Path, target_lang: str) -> Path:
@@ -251,6 +259,18 @@ def apply_junk_removals(
     return cleaned, removed
 
 
+def remove_auto_junk(cues: list[SubtitleCue]) -> tuple[list[SubtitleCue], int]:
+    """Drop obvious ads and credit lines (URLs, emails, release tags) without asking."""
+    removed = 0
+    cleaned: list[SubtitleCue] = []
+    for cue in cues:
+        kept = [ln for ln in cue.lines if _junk_reason(ln) not in AUTO_JUNK_REASONS]
+        removed += len(cue.lines) - len(kept)
+        if kept:
+            cleaned.append(SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=kept))
+    return cleaned, removed
+
+
 def _language_name(code: str) -> str:
     return LANGUAGE_LABELS.get(code, code)
 
@@ -287,38 +307,75 @@ def _build_translation_prompts(
     source_lang: str,
     target_lang: str,
     context_pairs: Sequence[tuple[str, str]],
+    lookahead: Sequence[str] = (),
+    style: Optional["TranslationStyle"] = None,
 ) -> tuple[str, str]:
-    source_name = _language_name(source_lang)
+    auto = source_lang == "auto"
+    source_label = "source" if auto else source_lang
     target_name = _language_name(target_lang)
+    if auto:
+        route = (
+            f"Translate from the source language (detect it yourself) into natural, fluent "
+            f"{target_name} ({target_lang}) dialogue."
+        )
+    else:
+        route = (
+            f"Translate from {_language_name(source_lang)} ({source_lang}) into natural, fluent "
+            f"{target_name} ({target_lang}) dialogue."
+        )
+    has_markers = any(PLACEHOLDER_RE.search(cue.text) for cue in batch)
     system_prompt = (
-        f"You are an expert subtitle translator for film and television.\n\n"
-        f"Translate from {source_name} ({source_lang}) into natural, fluent "
-        f"{target_name} ({target_lang}) dialogue.\n\n"
+        "You are an expert subtitle translator for film and television.\n\n"
+        f"{route}\n\n"
         "Quality rules:\n"
         "- Write how native speakers would actually say it: idiomatic, grammatical, "
-        "and natural — never stiff, awkward, or word-for-word literal.\n"
+        "and natural, never stiff, awkward, or word-for-word literal.\n"
         "- Consecutive cues are continuous dialogue; keep tone, register, and story "
         "context consistent across lines.\n"
         "- Each subtitle must read as a correct sentence or natural spoken phrase.\n"
         "- Fix clumsy source phrasing when needed so the target line still sounds right.\n"
         "- Preserve meaning, emotion, humor, and subtext.\n"
         "- Keep the same line breaks as the source (use \\n only where the source does).\n"
-        "- Keep lines concise and easy to read on screen.\n"
+        "- Keep lines concise and easy to read on screen. When a cue has max_chars, stay at or "
+        "under it by condensing, without losing the meaning.\n"
         "- Do not add notes, speaker labels, or numbering.\n"
-        "- Return JSON only."
+        "- Keep names of people and places consistent across the whole file.\n"
     )
+    if has_markers:
+        system_prompt += (
+            "- Markers like \u27e61\u27e7 stand for formatting. Keep every marker exactly once, "
+            "in the matching place, and never translate or renumber them.\n"
+        )
+    system_prompt += "- Return JSON only."
 
     parts: list[str] = []
+    if style is not None and style.notes:
+        parts.extend(["Notes about this material:", f"  {style.notes}", ""])
+    if style is not None and style.glossary:
+        parts.append("Glossary (always use these):")
+        for term, target in style.glossary:
+            parts.append(f"  {term} -> {target}" if target else f"  {term} (keep as is, do not translate)")
+        parts.append("")
     if context_pairs:
         parts.append(
-            "Previously translated lines (for dialogue continuity — do NOT re-translate these):"
+            "Previously translated lines (for dialogue continuity, do NOT re-translate these):"
         )
         for src, tgt in context_pairs:
-            parts.append(f"  [{source_lang}] {src}")
+            parts.append(f"  [{source_label}] {src}")
             parts.append(f"  [{target_lang}] {tgt}")
         parts.append("")
+    if lookahead:
+        parts.append("Upcoming lines (context only, do NOT translate these):")
+        parts.extend(f"  [{source_label}] {text}" for text in lookahead)
+        parts.append("")
 
-    payload = [{"id": i + 1, "text": cue.text} for i, cue in enumerate(batch)]
+    payload = []
+    for i, cue in enumerate(batch):
+        item: dict[str, object] = {"id": i + 1, "text": cue.text}
+        budget = char_budget(cue)
+        if budget is not None:
+            item["max_chars"] = budget
+        payload.append(item)
     parts.extend(
         [
             "Translate ONLY the following cues (they appear in order):",
@@ -328,6 +385,67 @@ def _build_translation_prompts(
         ]
     )
     return system_prompt, "\n".join(parts)
+
+
+@dataclass
+class TranslationStyle:
+    """Optional guidance from the user: a glossary and free-form notes about the show."""
+
+    glossary: list[tuple[str, Optional[str]]] = field(default_factory=list)
+    notes: str = ""
+
+    @classmethod
+    def parse(cls, glossary_text: str = "", notes: str = "") -> "TranslationStyle":
+        """Glossary lines are ``term = translation``; a bare ``term`` means keep it untranslated."""
+        entries: list[tuple[str, Optional[str]]] = []
+        for raw in (glossary_text or "").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            term, sep, target = line.partition("=")
+            term = term.strip()
+            if not term:
+                continue
+            entries.append((term, target.strip() or None if sep else None))
+        return cls(glossary=entries[:200], notes=(notes or "").strip()[:1000])
+
+    def key(self) -> str:
+        return json.dumps([self.glossary, self.notes], ensure_ascii=False)
+
+
+def mask_tags(text: str) -> tuple[str, list[str]]:
+    """Swap formatting tags for numbered markers the model can keep intact."""
+    tags: list[str] = []
+
+    def take(match: "re.Match[str]") -> str:
+        tags.append(match.group(0))
+        return f"\u27e6{len(tags)}\u27e7"
+
+    return TAG_RE.sub(take, text), tags
+
+
+def unmask_tags(text: str, tags: Sequence[str]) -> str:
+    def put(match: "re.Match[str]") -> str:
+        number = int(match.group(0)[1:-1])
+        return tags[number - 1] if 1 <= number <= len(tags) else ""
+
+    return PLACEHOLDER_RE.sub(put, text)
+
+
+def _seconds(stamp: str) -> Optional[float]:
+    match = TIME_RE.search(stamp)
+    if not match:
+        return None
+    h, m, sec, frac = match.groups()
+    return int(h) * 3600 + int(m) * 60 + int(sec) + int(frac) / (10 ** len(frac))
+
+
+def char_budget(cue: SubtitleCue) -> Optional[int]:
+    """How many characters comfortably fit in this cue at the target reading speed."""
+    start, end = _seconds(cue.start), _seconds(cue.end)
+    if start is None or end is None or end <= start:
+        return None
+    return max(10, int((end - start) * TARGET_CPS))
 
 
 @dataclass
@@ -372,12 +490,11 @@ def read_subtitle_text(path: Path, logger: Optional[logging.Logger] = None) -> s
     return raw.decode("utf-8", errors="replace")
 
 
-def _tag_signature(text: str) -> list[str]:
-    return sorted(TAG_RE.findall(text))
+def _translation_problem(source: SubtitleCue, text: str, tags: Sequence[str] = ()) -> Optional[str]:
+    """Why a translated cue is not usable as-is, or None. Soft problems still keep the text.
 
-
-def _translation_problem(source: SubtitleCue, text: str) -> Optional[str]:
-    """Why a translated cue is not usable as-is, or None. Soft problems still keep the text."""
+    ``source`` holds the masked text (markers instead of tags); ``tags`` are the tags behind them.
+    """
     if not text.strip():
         return "empty"
     lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
@@ -385,9 +502,21 @@ def _translation_problem(source: SubtitleCue, text: str) -> Optional[str]:
         return "blank line"
     if len(lines) > max(len(source.lines), 2):
         return "too many lines"
-    if _tag_signature(source.text) != _tag_signature(text):
+    expected = sorted(PLACEHOLDER_RE.findall(source.text))
+    # Accept the markers kept, or the model writing the original tags back itself.
+    if sorted(PLACEHOLDER_RE.findall(text)) != expected and sorted(TAG_RE.findall(text)) != sorted(tags):
         return "tags changed"
+    budget = char_budget(source)
+    if budget is not None and len(text.replace("\n", " ")) > max(budget * 2, 30):
+        return "too long to read"
     return None
+
+
+def _renumber(masked_line: str, offset: int) -> str:
+    """Shift the markers of one line so they stay unique across a cue's lines."""
+    if not offset:
+        return masked_line
+    return PLACEHOLDER_RE.sub(lambda m: f"\u27e6{int(m.group(0)[1:-1]) + offset}\u27e7", masked_line)
 
 
 def _extract_translations(parsed: object) -> dict[int, str]:
@@ -421,11 +550,18 @@ def _request_translations(
     source_lang: str,
     target_lang: str,
     context_pairs: Sequence[tuple[str, str]],
+    lookahead: Sequence[str],
+    style: Optional[TranslationStyle],
     logger: logging.Logger,
 ) -> dict[int, str]:
     """One request. Unusable replies come back as {} so the caller can retry those cues."""
     system_prompt, user_prompt = _build_translation_prompts(
-        cues, source_lang=source_lang, target_lang=target_lang, context_pairs=context_pairs
+        cues,
+        source_lang=source_lang,
+        target_lang=target_lang,
+        context_pairs=context_pairs,
+        lookahead=lookahead,
+        style=style,
     )
     try:
         parsed = provider.complete_json(
@@ -453,6 +589,8 @@ def _translate_batch(
     source_lang: str,
     target_lang: str,
     context_pairs: Sequence[tuple[str, str]],
+    lookahead: Sequence[str] = (),
+    style: Optional[TranslationStyle] = None,
     logger: logging.Logger,
     should_cancel: Optional[Callable[[], bool]],
     report: TranslationReport,
@@ -467,6 +605,18 @@ def _translate_batch(
     fallback: dict[int, str] = {}  # soft failures: usable text with a problem
     pending = list(range(len(batch)))
 
+    # The model sees numbered markers instead of tags; they are put back afterwards.
+    tag_lists: list[list[str]] = []
+    masked_batch: list[SubtitleCue] = []
+    for cue in batch:
+        masked_lines, tags = [], []
+        for line in cue.lines:
+            masked, found = mask_tags(line)
+            masked_lines.append(_renumber(masked, len(tags)))
+            tags.extend(found)
+        tag_lists.append(tags)
+        masked_batch.append(SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=masked_lines))
+
     for attempt in range(MAX_REPAIR_ATTEMPTS):
         if not pending:
             break
@@ -477,10 +627,12 @@ def _translate_batch(
             _check_cancel(should_cancel)
             got = _request_translations(
                 provider,
-                [batch[i] for i in group],
+                [masked_batch[i] for i in group],
                 source_lang=source_lang,
                 target_lang=target_lang,
                 context_pairs=context_pairs,
+                lookahead=lookahead,
+                style=style,
                 logger=logger,
             )
             for local, i in enumerate(group, start=1):
@@ -488,7 +640,7 @@ def _translate_batch(
                 if text is None:
                     still.append(i)
                     continue
-                problem = _translation_problem(batch[i], text)
+                problem = _translation_problem(masked_batch[i], text, tag_lists[i])
                 if problem is None:
                     results[i] = text
                 else:
@@ -504,11 +656,15 @@ def _translate_batch(
     texts: list[str] = []
     for i, cue in enumerate(batch):
         if i in results:
-            texts.append(results[i])
+            texts.append(unmask_tags(results[i], tag_lists[i]))
         elif i in fallback:
             report.flagged += 1
-            logger.warning("Cue %d may need a check (%s).", cue.index, _translation_problem(cue, fallback[i]))
-            texts.append(fallback[i])
+            logger.warning(
+                "Cue %d may need a check (%s).",
+                cue.index,
+                _translation_problem(masked_batch[i], fallback[i], tag_lists[i]),
+            )
+            texts.append(unmask_tags(fallback[i], tag_lists[i]))
         else:
             report.untranslated += 1
             logger.warning("Cue %d could not be translated; keeping its original text.", cue.index)
@@ -529,6 +685,7 @@ def translate_cues_batch(
     report: Optional[TranslationReport] = None,
     checkpoint: Optional[dict[int, list[str]]] = None,
     on_batch_done: Optional[Callable[[int, list[str]], None]] = None,
+    style: Optional[TranslationStyle] = None,
 ) -> list[SubtitleCue]:
     """Translate cues batch by batch.
 
@@ -563,6 +720,10 @@ def translate_cues_batch(
                 source_lang=source_lang,
                 target_lang=target_lang,
                 context_pairs=context_pairs,
+                lookahead=[
+                    c.text for c in cues[batch_start + len(batch) : batch_start + len(batch) + LOOKAHEAD_CUES]
+                ],
+                style=style,
                 logger=logger,
                 should_cancel=should_cancel,
                 report=report,
@@ -635,6 +796,8 @@ def process_srt_file(
     on_progress: Optional[Callable[[dict], None]] = None,
     should_cancel: Optional[Callable[[], bool]] = None,
     report: Optional[TranslationReport] = None,
+    style: Optional[TranslationStyle] = None,
+    remove_junk: bool = False,
 ) -> Optional[Path]:
     def emit_progress(payload: dict) -> None:
         if on_progress is None:
@@ -671,6 +834,14 @@ def process_srt_file(
         if removed:
             logger.info("%s: removing %d junk line(s).", src.name, removed)
 
+    if remove_junk:
+        cues, auto_removed = remove_auto_junk(cues)
+        if auto_removed:
+            logger.info("%s: dropping %d ad/credit line(s) before translating.", src.name, auto_removed)
+        if not cues:
+            logger.warning("Skip %s: nothing left after removing junk lines.", src.name)
+            return None
+
     if dry_run:
         logger.info(
             "Would translate %s -> %s (%d cues, %s -> %s).",
@@ -685,7 +856,9 @@ def process_srt_file(
 
     emit_progress({"file_pct": 0, "status": "Starting"})
     checkpoint_file = _checkpoint_path(
-        hashlib.sha256(format_srt(cues).encode("utf-8")).hexdigest(), target_lang, model or ""
+        hashlib.sha256(format_srt(cues).encode("utf-8")).hexdigest(),
+        target_lang,
+        f"{model or ''}|{resolved_source}|{style.key() if style else ''}",
     )
     saved = _load_checkpoint(checkpoint_file)
     if saved:
@@ -711,6 +884,7 @@ def process_srt_file(
         report=report,
         checkpoint=saved,
         on_batch_done=remember,
+        style=style,
     )
     _write_atomic(dst, format_srt(translated))
     try:
@@ -752,6 +926,24 @@ def process_srt_cleanup_file(
     return removed
 
 
+def plan_translation_files(files: list[Path], target_lang: str, logger: logging.Logger) -> list[Path]:
+    """Folder mode: leave out files that are already in the target language, and keep one
+    source per output file, so a translation is never translated again."""
+    planned: list[Path] = []
+    seen: dict[Path, Path] = {}
+    for path in files:
+        if detect_lang_from_path(path) == target_lang:
+            logger.info("Skip %s: already in the target language.", path.name)
+            continue
+        dst = build_output_path(path, target_lang)
+        if dst in seen:
+            logger.info("Skip %s: %s is already being translated to %s.", path.name, seen[dst].name, dst.name)
+            continue
+        seen[dst] = path
+        planned.append(path)
+    return planned
+
+
 def run_subtitle_translate(
     args: argparse.Namespace,
     *,
@@ -775,7 +967,18 @@ def run_subtitle_translate(
 
     model = resolve_model(getattr(args, "model", None))
     files = collect_srt_files(input_path)
+    if len(files) > 1 or path_is_dir(Path(clean_path_string(str(input_path)))):
+        files = plan_translation_files(files, target_lang, logger)
+        if not files:
+            logger.warning("Nothing to translate.")
+            return TranslationReport()
     total = len(files)
+    glossary_text = getattr(args, "glossary", "") or ""
+    glossary_file = getattr(args, "glossary_file", None)
+    if glossary_file:
+        glossary_text = read_subtitle_text(Path(glossary_file), logger)
+    style = TranslationStyle.parse(glossary_text, getattr(args, "notes", "") or "")
+    remove_junk = bool(getattr(args, "remove_junk", True))
 
     hooks = get_active_hooks()
     progress_cb = hooks.on_progress
@@ -799,6 +1002,8 @@ def run_subtitle_translate(
                 on_progress=progress_cb,
                 should_cancel=should_cancel,
                 report=report,
+                style=style,
+                remove_junk=remove_junk,
             )
         except AiError as exc:
             # Provider-level problems (bad key, quota, unreachable) hit every file alike.

@@ -14,6 +14,9 @@ class Params(BaseModel):
     source_lang: str = "auto"
     target_lang: str = "en"
     overwrite: bool = False
+    glossary: str = ""
+    notes: str = ""
+    remove_junk: bool = True
     dry_run: bool = True
 
     @field_validator("input")
@@ -30,6 +33,9 @@ def run(params, ctx):
             source_lang=p["source_lang"],
             target_lang=p["target_lang"],
             overwrite=p["overwrite"],
+            glossary=p.get("glossary", ""),
+            notes=p.get("notes", ""),
+            remove_junk=p.get("remove_junk", True),
             dry_run=p["dry_run"],
             model=None,
         ),

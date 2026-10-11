@@ -670,6 +670,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Overwrite existing translated output files.",
     )
     subtitle_translate.add_argument(
+        "--glossary-file",
+        type=Path,
+        help="Text file with one 'term = translation' per line (a bare term is kept untranslated).",
+    )
+    subtitle_translate.add_argument(
+        "--notes",
+        default="",
+        help="Free-form notes for the translator, e.g. 'teen drama, informal register'.",
+    )
+    subtitle_translate.add_argument(
+        "--keep-junk",
+        dest="remove_junk",
+        action="store_false",
+        help="Translate ad, credit and URL lines instead of dropping them.",
+    )
+    subtitle_translate.add_argument(
         "--dry-run",
         action="store_true",
         help="Show planned actions without calling the AI provider or writing files.",
