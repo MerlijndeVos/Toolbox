@@ -24,7 +24,7 @@ class Params(BaseModel):
 
 def run(params, ctx):
     p = params
-    run_subtitle_translate(
+    report = run_subtitle_translate(
         argparse.Namespace(
             input=Path(p["input"]),
             source_lang=p["source_lang"],
@@ -32,5 +32,16 @@ def run(params, ctx):
             overwrite=p["overwrite"],
             dry_run=p["dry_run"],
             model=None,
-        )
+        ),
+        should_cancel=ctx.cancelled,
     )
+    if not p["dry_run"] and (report.untranslated or report.flagged):
+        ctx.result(
+            "counters",
+            title="Translation finished with warnings",
+            items={
+                "Cues translated": report.total - report.untranslated,
+                "Kept original text": report.untranslated,
+                "May need a check": report.flagged,
+            },
+        )

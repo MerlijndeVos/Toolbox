@@ -14,6 +14,7 @@ panel = "subtitle_translate"
 
 [run]
 loggers = ["subtitle_translate"]
+cancel = "cooperative"
 
 [permissions]
 network = true

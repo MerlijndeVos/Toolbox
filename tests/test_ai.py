@@ -572,8 +572,10 @@ class FeatureTests(unittest.TestCase):
             SubtitleCue(index=1, start="00:00:01,000", end="00:00:02,000", lines=["Hello"]),
             SubtitleCue(index=2, start="00:00:02,000", end="00:00:03,000", lines=["World"]),
         ]
-        reply = {"translations": [{"id": 1, "text": "Hallo"}]}
-        provider = FakeProvider([JsonResult(text="", data=reply)])
+        first = {"translations": [{"id": 1, "text": "Hallo"}]}
+        never = {"translations": []}
+        # Whole batch, then the missing cue, then the missing cue on its own.
+        provider = FakeProvider([JsonResult(text="", data=d) for d in (first, never, never)])
 
         with self.assertLogs("test", level="WARNING") as logs:
             out = translate_cues_batch(
@@ -581,7 +583,8 @@ class FeatureTests(unittest.TestCase):
                 logger=logging.getLogger("test"), provider=provider,
             )
         self.assertEqual([c.lines for c in out], [["Hallo"], ["World"]])
-        self.assertIn("did not return 1 of 2", logs.output[0])
+        self.assertEqual(len(provider.calls), 3)
+        self.assertTrue(any("could not be translated" in line for line in logs.output))
 
     def test_rename_profile_recovers_from_unusable_json(self):
         from core.rename_ai import generate_profile

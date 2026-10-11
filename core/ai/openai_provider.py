@@ -23,6 +23,8 @@ from .base import (
 # (base_url, model) pairs whose server rejected ``response_format``. Remembered for the
 # session so a local model does not pay for a failed request on every batch.
 _NO_JSON_MODE: set[tuple[str, str]] = set()
+# Same for models that only accept their default temperature (reasoning models).
+_NO_TEMPERATURE: set[tuple[str, str]] = set()
 
 
 class OpenAiProvider(Provider):
@@ -41,11 +43,11 @@ class OpenAiProvider(Provider):
             try:
                 if key in _NO_JSON_MODE:
                     raise _NoJsonMode
-                response = self._create(client, messages, temperature, json_mode=True)
+                response = self._call(client, messages, temperature, json_mode=True)
             except (_NoJsonMode, openai.BadRequestError, openai.UnprocessableEntityError) as exc:
                 # Not every server supports response_format. Retry with a prompt-only
                 # instruction; remember that only if the retry works.
-                response = self._create(client, with_json_instruction(messages), temperature, json_mode=False)
+                response = self._call(client, with_json_instruction(messages), temperature, json_mode=False)
                 if not isinstance(exc, _NoJsonMode):
                     _NO_JSON_MODE.add(key)
         except openai.APITimeoutError as exc:
@@ -71,8 +73,25 @@ class OpenAiProvider(Provider):
             timeout=REQUEST_TIMEOUT,
         )
 
-    def _create(self, client: Any, messages: list[Message], temperature: float, *, json_mode: bool) -> Any:
-        kwargs: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": temperature}
+    def _call(self, client: Any, messages: list[Message], temperature: float, *, json_mode: bool) -> Any:
+        """``_create``, dropping ``temperature`` for models that reject a custom value."""
+        import openai
+
+        key = (self.base_url, self.model)
+        use = None if key in _NO_TEMPERATURE else temperature
+        try:
+            return self._create(client, messages, use, json_mode=json_mode)
+        except (openai.BadRequestError, openai.UnprocessableEntityError) as exc:
+            if use is None or "temperature" not in str(exc).lower():
+                raise
+            response = self._create(client, messages, None, json_mode=json_mode)
+            _NO_TEMPERATURE.add(key)
+            return response
+
+    def _create(self, client: Any, messages: list[Message], temperature: float | None, *, json_mode: bool) -> Any:
+        kwargs: dict[str, Any] = {"model": self.model, "messages": messages}
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
         return client.chat.completions.create(**kwargs)

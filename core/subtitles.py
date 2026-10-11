@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import os
@@ -12,12 +13,14 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional, Sequence, Set
 
 from . import config
+from .mods.context import ModCancelled
+from .runtime import app_data_dir
 from .log_storage import operation_log_path
 from .logging_setup import setup_simple_logging
 from .paths import clean_path_string, path_exists, path_is_dir, path_is_file
 from .progress import get_active_hooks
 from .rename import SUB_FLAG_TOKENS, split_subtitle_suffix
-from .ai import Provider, get_provider, resolve_model
+from .ai import AiError, InvalidJsonError, Provider, get_provider, resolve_model
 from .subtitle_languages import (
     LANGUAGE_LABELS,
     normalize_lang_code,
@@ -26,6 +29,10 @@ from .subtitle_languages import (
 SRT_EXTENSION = ".srt"
 TRANSLATE_BATCH_SIZE = 25
 CONTEXT_CUES = 4
+# Requests per batch: the whole batch, then only the cues that failed, then one cue at a time.
+MAX_REPAIR_ATTEMPTS = 3
+TRANSLATE_TEMPERATURE = 0.15
+TAG_RE = re.compile(r"<[^>]+>|\{[^}]*\}")
 
 URL_RE = re.compile(
     r"(https?://|www\.)[^\s]+",
@@ -323,6 +330,192 @@ def _build_translation_prompts(
     return system_prompt, "\n".join(parts)
 
 
+@dataclass
+class TranslationReport:
+    """What a translation run could not do cleanly, so callers can tell success from partial."""
+
+    total: int = 0
+    untranslated: int = 0
+    flagged: int = 0
+    resumed_batches: int = 0
+
+    @property
+    def clean(self) -> bool:
+        return self.untranslated == 0
+
+
+def _check_cancel(should_cancel: Optional[Callable[[], bool]]) -> None:
+    if should_cancel is not None and should_cancel():
+        raise ModCancelled()
+
+
+def read_subtitle_text(path: Path, logger: Optional[logging.Logger] = None) -> str:
+    """Read a subtitle file, falling back from UTF-8 to UTF-16 (BOM) and then Windows-1252.
+
+    Never substitutes U+FFFD silently: a legacy encoding is logged so the user can check it.
+    """
+    raw = path.read_bytes()
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        pass
+    for encoding in ("cp1252", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if logger is not None:
+            logger.warning("%s is not valid UTF-8; read it as %s.", path.name, encoding)
+        return text
+    return raw.decode("utf-8", errors="replace")
+
+
+def _tag_signature(text: str) -> list[str]:
+    return sorted(TAG_RE.findall(text))
+
+
+def _translation_problem(source: SubtitleCue, text: str) -> Optional[str]:
+    """Why a translated cue is not usable as-is, or None. Soft problems still keep the text."""
+    if not text.strip():
+        return "empty"
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    if any(not ln.strip() for ln in lines):
+        return "blank line"
+    if len(lines) > max(len(source.lines), 2):
+        return "too many lines"
+    if _tag_signature(source.text) != _tag_signature(text):
+        return "tags changed"
+    return None
+
+
+def _extract_translations(parsed: object) -> dict[int, str]:
+    items = parsed.get("translations") if isinstance(parsed, dict) else parsed
+    if isinstance(parsed, dict) and items is None:
+        # Accept a list under any key.
+        for value in parsed.values():
+            if isinstance(value, list):
+                items = value
+                break
+    if not isinstance(items, list):
+        raise RuntimeError(f"Unexpected response shape: {str(parsed)[:200]}")
+    by_id: dict[int, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            cue_id = int(item.get("id"))
+        except (TypeError, ValueError):
+            continue
+        text = item.get("text")
+        if isinstance(text, str):
+            by_id[cue_id] = text
+    return by_id
+
+
+def _request_translations(
+    provider: Provider,
+    cues: Sequence[SubtitleCue],
+    *,
+    source_lang: str,
+    target_lang: str,
+    context_pairs: Sequence[tuple[str, str]],
+    logger: logging.Logger,
+) -> dict[int, str]:
+    """One request. Unusable replies come back as {} so the caller can retry those cues."""
+    system_prompt, user_prompt = _build_translation_prompts(
+        cues, source_lang=source_lang, target_lang=target_lang, context_pairs=context_pairs
+    )
+    try:
+        parsed = provider.complete_json(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=TRANSLATE_TEMPERATURE,
+        ).data
+        return _extract_translations(parsed)
+    except AiError as exc:
+        if isinstance(exc, InvalidJsonError):
+            logger.warning("%s sent a reply that was not valid JSON.", provider.label)
+            return {}
+        raise
+    except RuntimeError as exc:
+        logger.warning("%s sent a reply that could not be used: %s", provider.label, exc)
+        return {}
+
+
+def _translate_batch(
+    provider: Provider,
+    batch: Sequence[SubtitleCue],
+    *,
+    source_lang: str,
+    target_lang: str,
+    context_pairs: Sequence[tuple[str, str]],
+    logger: logging.Logger,
+    should_cancel: Optional[Callable[[], bool]],
+    report: TranslationReport,
+) -> list[str]:
+    """Translate one batch, re-asking only for cues that failed validation.
+
+    Attempt 1 sends the whole batch, attempt 2 only the failures, and the last attempt sends
+    them one by one. A cue that never validates keeps the model's text when it has some
+    (flagged for review), otherwise the source text (counted as untranslated).
+    """
+    results: dict[int, str] = {}
+    fallback: dict[int, str] = {}  # soft failures: usable text with a problem
+    pending = list(range(len(batch)))
+
+    for attempt in range(MAX_REPAIR_ATTEMPTS):
+        if not pending:
+            break
+        last = attempt == MAX_REPAIR_ATTEMPTS - 1
+        groups = [[i] for i in pending] if last and len(pending) > 1 else [pending]
+        still: list[int] = []
+        for group in groups:
+            _check_cancel(should_cancel)
+            got = _request_translations(
+                provider,
+                [batch[i] for i in group],
+                source_lang=source_lang,
+                target_lang=target_lang,
+                context_pairs=context_pairs,
+                logger=logger,
+            )
+            for local, i in enumerate(group, start=1):
+                text = got.get(local)
+                if text is None:
+                    still.append(i)
+                    continue
+                problem = _translation_problem(batch[i], text)
+                if problem is None:
+                    results[i] = text
+                else:
+                    if text.strip():
+                        fallback[i] = text
+                    still.append(i)
+        if still and not last:
+            logger.warning(
+                "%s: %d of %d cue(s) in this batch need another try.", provider.label, len(still), len(batch)
+            )
+        pending = still
+
+    texts: list[str] = []
+    for i, cue in enumerate(batch):
+        if i in results:
+            texts.append(results[i])
+        elif i in fallback:
+            report.flagged += 1
+            logger.warning("Cue %d may need a check (%s).", cue.index, _translation_problem(cue, fallback[i]))
+            texts.append(fallback[i])
+        else:
+            report.untranslated += 1
+            logger.warning("Cue %d could not be translated; keeping its original text.", cue.index)
+            texts.append(cue.text)
+    return texts
+
+
 def translate_cues_batch(
     cues: list[SubtitleCue],
     *,
@@ -332,72 +525,55 @@ def translate_cues_batch(
     logger: logging.Logger,
     on_progress: Optional[Callable[[dict], None]] = None,
     provider: Optional[Provider] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+    report: Optional[TranslationReport] = None,
+    checkpoint: Optional[dict[int, list[str]]] = None,
+    on_batch_done: Optional[Callable[[int, list[str]], None]] = None,
 ) -> list[SubtitleCue]:
+    """Translate cues batch by batch.
+
+    ``checkpoint`` maps batch number to already translated texts (resume); ``on_batch_done``
+    is called with each freshly translated batch so the caller can persist it.
+    """
     if not cues:
         return []
 
+    report = report if report is not None else TranslationReport()
+    report.total += len(cues)
     provider = provider or get_provider(model)
 
     translated: list[SubtitleCue] = []
     total_batches = max(1, (len(cues) + TRANSLATE_BATCH_SIZE - 1) // TRANSLATE_BATCH_SIZE)
     for batch_num, batch_start in enumerate(range(0, len(cues), TRANSLATE_BATCH_SIZE), start=1):
+        _check_cancel(should_cancel)
         batch = cues[batch_start : batch_start + TRANSLATE_BATCH_SIZE]
-        context_pairs = [
-            (cues[i].text, translated[i].text)
-            for i in range(max(0, batch_start - CONTEXT_CUES), batch_start)
-            if i < len(translated)
-        ]
-        system_prompt, user_prompt = _build_translation_prompts(
-            batch,
-            source_lang=source_lang,
-            target_lang=target_lang,
-            context_pairs=context_pairs,
-        )
-        parsed = provider.complete_json(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.15,
-        ).data
-
-        items = parsed.get("translations") if isinstance(parsed, dict) else parsed
-        if isinstance(parsed, dict) and items is None:
-            # Accept {"1": "...", "2": "..."} or list under any key
-            for value in parsed.values():
-                if isinstance(value, list):
-                    items = value
-                    break
-        if not isinstance(items, list):
-            raise RuntimeError(f"Unexpected response shape from {provider.label}: {str(parsed)[:200]}")
-
-        by_id: dict[int, str] = {}
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            try:
-                cue_id = int(item.get("id"))
-            except (TypeError, ValueError):
-                continue
-            text = item.get("text")
-            if isinstance(text, str):
-                by_id[cue_id] = text
-
-        missing = sum(1 for i in range(len(batch)) if (i + 1) not in by_id)
-        if missing:
-            logger.warning(
-                "%s did not return %d of %d cue(s) in this batch; they keep their original text.",
-                provider.label,
-                missing,
-                len(batch),
+        saved = (checkpoint or {}).get(batch_num)
+        if saved is not None and len(saved) == len(batch):
+            texts = saved
+            report.resumed_batches += 1
+        else:
+            context_pairs = [
+                (cues[i].text, translated[i].text)
+                for i in range(max(0, batch_start - CONTEXT_CUES), batch_start)
+                if i < len(translated)
+            ]
+            texts = _translate_batch(
+                provider,
+                batch,
+                source_lang=source_lang,
+                target_lang=target_lang,
+                context_pairs=context_pairs,
+                logger=logger,
+                should_cancel=should_cancel,
+                report=report,
             )
+            if on_batch_done is not None:
+                on_batch_done(batch_num, texts)
 
-        for i, cue in enumerate(batch):
-            new_text = by_id.get(i + 1, cue.text)
-            lines = new_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-            translated.append(
-                SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=lines)
-            )
+        by_id = {i + 1: text for i, text in enumerate(texts)}
+        for cue, text in zip(batch, texts):
+            lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            translated.append(SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=lines))
         logger.info(
             "Translated cues %d–%d of %d.",
             batch_start + 1,
@@ -419,6 +595,30 @@ def translate_cues_batch(
     return translated
 
 
+def _checkpoint_path(content_hash: str, target_lang: str, model: str) -> Path:
+    key = hashlib.sha256(
+        f"{content_hash}|{target_lang}|{model}|{TRANSLATE_BATCH_SIZE}".encode("utf-8")
+    ).hexdigest()[:24]
+    folder = app_data_dir() / "translate_checkpoints"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"{key}.json"
+
+
+def _load_checkpoint(path: Path) -> dict[int, list[str]]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return {int(k): [str(t) for t in v] for k, v in data.items()}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
+def _write_atomic(dst: Path, text: str) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dst.with_name(dst.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, dst)
+
+
 def process_srt_file(
     src: Path,
     *,
@@ -433,6 +633,8 @@ def process_srt_file(
     file_index: int = 1,
     total_files: int = 1,
     on_progress: Optional[Callable[[dict], None]] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,
+    report: Optional[TranslationReport] = None,
 ) -> Optional[Path]:
     def emit_progress(payload: dict) -> None:
         if on_progress is None:
@@ -457,7 +659,7 @@ def process_srt_file(
         logger.warning("Skip %s: output already exists (%s).", src.name, dst.name)
         return None
 
-    content = src.read_text(encoding="utf-8-sig", errors="replace")
+    content = read_subtitle_text(src, logger)
     cues = parse_srt(content)
     if not cues:
         logger.warning("Skip %s: no cues parsed.", src.name)
@@ -482,6 +684,22 @@ def process_srt_file(
         return dst
 
     emit_progress({"file_pct": 0, "status": "Starting"})
+    checkpoint_file = _checkpoint_path(
+        hashlib.sha256(format_srt(cues).encode("utf-8")).hexdigest(), target_lang, model or ""
+    )
+    saved = _load_checkpoint(checkpoint_file)
+    if saved:
+        logger.info("Resuming %s: %d batch(es) already translated.", src.name, len(saved))
+
+    def remember(batch_num: int, texts: list[str]) -> None:
+        saved[batch_num] = texts
+        try:
+            _write_atomic(checkpoint_file, json.dumps(saved, ensure_ascii=False))
+        except OSError:
+            pass
+
+    report = report if report is not None else TranslationReport()
+    untranslated_before = report.untranslated
     translated = translate_cues_batch(
         cues,
         source_lang=resolved_source,
@@ -489,10 +707,20 @@ def process_srt_file(
         model=model,
         logger=logger,
         on_progress=emit_progress,
+        should_cancel=should_cancel,
+        report=report,
+        checkpoint=saved,
+        on_batch_done=remember,
     )
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    dst.write_text(format_srt(translated), encoding="utf-8")
+    _write_atomic(dst, format_srt(translated))
+    try:
+        checkpoint_file.unlink()
+    except OSError:
+        pass
     logger.info("Wrote %s (%d cues).", dst.name, len(translated))
+    missed = report.untranslated - untranslated_before
+    if missed:
+        logger.warning("%s: %d cue(s) kept their original text.", dst.name, missed)
     return dst
 
 
@@ -504,7 +732,7 @@ def process_srt_cleanup_file(
     logger: logging.Logger,
 ) -> int:
     """Remove confirmed junk lines from *src*. Returns lines removed."""
-    content = src.read_text(encoding="utf-8-sig", errors="replace")
+    content = read_subtitle_text(src, logger)
     cues = parse_srt(content)
     if not cues:
         logger.warning("Skip %s: no cues parsed.", src.name)
@@ -524,7 +752,16 @@ def process_srt_cleanup_file(
     return removed
 
 
-def run_subtitle_translate(args: argparse.Namespace) -> None:
+def run_subtitle_translate(
+    args: argparse.Namespace,
+    *,
+    should_cancel: Optional[Callable[[], bool]] = None,
+) -> TranslationReport:
+    """Translate one file or a folder. A failing file is reported and the rest carry on.
+
+    Raises ``RuntimeError`` at the end when any file failed, so the job does not end as a
+    plain success. Returns the combined report.
+    """
     input_path: Path = args.input
     target_lang = normalize_lang_code(args.target_lang) or args.target_lang.lower()
     if not target_lang or target_lang == "auto":
@@ -542,21 +779,36 @@ def run_subtitle_translate(args: argparse.Namespace) -> None:
 
     hooks = get_active_hooks()
     progress_cb = hooks.on_progress
+    report = TranslationReport()
+    failed: list[str] = []
     for i, path in enumerate(files, start=1):
-        process_srt_file(
-            path,
-            target_lang=target_lang,
-            source_lang=args.source_lang,
-            model=model,
-            clean_junk=False,
-            confirmed_removals=set(),
-            dry_run=args.dry_run,
-            overwrite=args.overwrite,
-            logger=logger,
-            file_index=i,
-            total_files=total,
-            on_progress=progress_cb,
-        )
+        _check_cancel(should_cancel)
+        try:
+            process_srt_file(
+                path,
+                target_lang=target_lang,
+                source_lang=args.source_lang,
+                model=model,
+                clean_junk=False,
+                confirmed_removals=set(),
+                dry_run=args.dry_run,
+                overwrite=args.overwrite,
+                logger=logger,
+                file_index=i,
+                total_files=total,
+                on_progress=progress_cb,
+                should_cancel=should_cancel,
+                report=report,
+            )
+        except AiError as exc:
+            # Provider-level problems (bad key, quota, unreachable) hit every file alike.
+            logger.error("Stopped at %s: %s", path.name, exc)
+            raise
+        except ModCancelled:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one bad file must not lose the others
+            logger.error("Failed %s: %s", path.name, exc)
+            failed.append(path.name)
         if progress_cb is not None:
             progress_cb(
                 {
@@ -568,8 +820,16 @@ def run_subtitle_translate(args: argparse.Namespace) -> None:
 
     if args.dry_run:
         logger.info("Dry run complete (%d file(s)).", total)
-    else:
-        logger.info("Translation complete (%d file(s)).", total)
+        return report
+
+    logger.info("Translation complete (%d file(s)).", total)
+    if report.flagged:
+        logger.warning("%d cue(s) may need a check (tags or line breaks changed).", report.flagged)
+    if report.untranslated:
+        logger.warning("%d cue(s) kept their original text.", report.untranslated)
+    if failed:
+        raise RuntimeError(f"{len(failed)} of {total} file(s) failed: {', '.join(failed)}")
+    return report
 
 
 def run_subtitle_cleanup(args: argparse.Namespace) -> None:
