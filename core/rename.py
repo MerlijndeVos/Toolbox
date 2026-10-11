@@ -417,6 +417,20 @@ def _parse_movie(
     return MediaInfo(kind="movie", title=title, year=year)
 
 
+def _is_subtitle_tag(token: str) -> bool:
+    """True when a trailing dotted token is a language or flag tag rather than a title word.
+
+    Tags are written ``en``, ``EN`` or ``English``. A short Capitalised token such as ``It``,
+    ``No`` or ``Hi`` is a word in the title ("Where.Is.It"), not Italian, Norwegian or Hindi.
+    """
+    lowered = token.lower()
+    if lowered not in SUB_LANG_TOKENS and lowered not in SUB_FLAG_TOKENS:
+        return False
+    if len(token) <= 3 and token[:1].isupper() and token[1:].islower():
+        return False
+    return True
+
+
 def split_subtitle_suffix(stem: str) -> Tuple[str, str]:
     """Split a subtitle stem into (base_stem, suffix) where suffix holds trailing
     language/flag tags. Suffix is returned without a leading dot.
@@ -427,7 +441,7 @@ def split_subtitle_suffix(stem: str) -> Tuple[str, str]:
     suffix_parts: List[str] = []
     while len(parts) > 1:
         last = parts[-1].lower()
-        if last in SUB_LANG_TOKENS or last in SUB_FLAG_TOKENS:
+        if _is_subtitle_tag(parts[-1]):
             suffix_parts.insert(0, parts[-1])
             parts = parts[:-1]
         else:

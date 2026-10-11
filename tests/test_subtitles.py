@@ -154,6 +154,17 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(unmask_tags(masked, tags), "<i>Hi</i> {\\an8}there")
         self.assertNotIn("<", masked)
 
+    def test_title_words_are_not_language_tags(self):
+        from core.rename import split_subtitle_suffix
+
+        self.assertEqual(split_subtitle_suffix("Where.Is.It"), ("Where.Is.It", ""))
+        self.assertEqual(split_subtitle_suffix("Say.Hi"), ("Say.Hi", ""))
+        self.assertEqual(split_subtitle_suffix("Where.Is.It.en"), ("Where.Is.It", "en"))
+        self.assertEqual(split_subtitle_suffix("Show.S01E01.en.forced"), ("Show.S01E01", "en.forced"))
+        self.assertEqual(split_subtitle_suffix("Show.it"), ("Show", "it"))
+        self.assertEqual(split_subtitle_suffix("Show.EN"), ("Show", "EN"))
+        self.assertEqual(split_subtitle_suffix("Show.Dutch"), ("Show", "Dutch"))
+
     def test_char_budget_uses_duration(self):
         self.assertEqual(char_budget(cue(1, "x")), 17)
 

@@ -23,5 +23,6 @@ Per-release write-ups live in `release-notes/`.
 - Subtitle files in a legacy encoding (Windows-1252, UTF-16) are decoded properly, with a warning, instead of being filled with replacement characters.
 
 ### Fixed
+- A title word at the end of a subtitle name ("Where.Is.It.srt") is no longer read as a language tag, so Rename and Translate keep the full title. Tags are `en`, `EN` or `English`; short Capitalised words are left alone.
 - Cancelling a translation now stops it, instead of continuing to call the AI provider and writing the file afterwards.
 - OpenAI models that reject a custom temperature are retried without it.

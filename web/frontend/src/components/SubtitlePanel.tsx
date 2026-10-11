@@ -32,7 +32,10 @@ function detectLangFromFilename(path: string, languages: SubtitleLanguage[]): st
   const parts = stem.split(".");
   const codes = new Set(languages.map((l) => l.code.toLowerCase()));
   while (parts.length > 1) {
-    const last = parts[parts.length - 1].toLowerCase();
+    const raw = parts[parts.length - 1];
+    const last = raw.toLowerCase();
+    // A short Capitalised token ("It", "No", "Hi") is a title word, not a tag.
+    if (raw.length <= 3 && /^[A-Z][a-z]*$/.test(raw)) break;
     if (FLAG_TOKENS.has(last)) {
       parts.pop();
       continue;
