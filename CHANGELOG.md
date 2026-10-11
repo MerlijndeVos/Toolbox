@@ -5,6 +5,8 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-10-11
+
 ### Added
 - Subtitle translation re-asks only for cues the model skipped, answered badly, or returned with changed tags or odd line breaks, then falls back to one cue at a time.
 - Translated batches are checkpointed, so a retry after a failure or cancel resumes instead of paying again.
