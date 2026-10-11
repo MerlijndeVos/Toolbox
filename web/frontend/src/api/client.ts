@@ -274,7 +274,7 @@ export interface LogsStats {
   files: LogFileInfo[];
 }
 
-export type AiProviderId = "openai" | "openai_compatible" | "anthropic" | "gemini";
+export type AiProviderId = "openai" | "openai_compatible" | "anthropic" | "gemini" | "claude_subscription";
 
 export interface AiProviderSettings {
   api_key_set: boolean;
@@ -346,6 +346,58 @@ export function testAiConnection(
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export interface AiUsageTotals {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+  cost_usd: number | null;
+}
+
+export interface AiUsageGroup extends AiUsageTotals {
+  name: string;
+}
+
+export interface AiUsageSummary {
+  provider: AiProviderId;
+  today: AiUsageTotals;
+  week: AiUsageTotals;
+  all: AiUsageTotals;
+  /** Oldest first; `start` is the bucket's start (unix seconds). */
+  days: (AiUsageTotals & { start: number })[];
+  by_model: AiUsageGroup[];
+  by_feature: AiUsageGroup[];
+  /** The Claude plan windows, once a subscription call has reported them. */
+  limits: {
+    updated: number;
+    status: string;
+    limit_type: string;
+    windows: Record<string, { utilization: number; resets_at: number | null }>;
+  } | null;
+  recent: {
+    ts: number;
+    label: string;
+    model: string;
+    feature: string;
+    input_tokens: number;
+    output_tokens: number;
+    cost_usd: number | null;
+  }[];
+}
+
+export function fetchAiUsage(): Promise<AiUsageSummary> {
+  return request<AiUsageSummary>("/api/ai/usage");
+}
+
+export function clearAiUsage(): Promise<AiUsageSummary> {
+  return request<AiUsageSummary>("/api/ai/usage", { method: "DELETE" });
+}
+
+/** One tiny Claude call so the plan windows are current. */
+export function refreshAiLimits(): Promise<AiUsageSummary> {
+  return request<AiUsageSummary>("/api/ai/usage/refresh", { method: "POST" });
 }
 
 export interface SubtitleLanguage {

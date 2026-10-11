@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from .base import AiError, HttpProvider, JsonResult, Message, parse_json, split_system
+from .usage import usage_from_anthropic
 
 DEFAULT_BASE_URL = "https://api.anthropic.com"
 API_VERSION = "2023-06-01"
@@ -51,9 +52,10 @@ class AnthropicProvider(HttpProvider):
         blocks = body.get("content") or []
         for block in blocks:
             if block.get("type") == "tool_use" and isinstance(block.get("input"), dict):
-                return JsonResult(text=json.dumps(block["input"], ensure_ascii=False), data=block["input"])
+                result = JsonResult(text=json.dumps(block["input"], ensure_ascii=False), data=block["input"])
+                return self._finish(result, usage_from_anthropic(body.get("usage")))
 
         if body.get("stop_reason") == "max_tokens":
             raise AiError("The reply was cut off (token limit). Try a model with a larger output limit.")
         text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
-        return parse_json(text)
+        return self._finish(parse_json(text), usage_from_anthropic(body.get("usage")))

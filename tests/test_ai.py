@@ -454,8 +454,9 @@ class ConfigTests(SettingsTestCase):
             }
         )
         kinds = {}
-        for pid in ai.PROVIDERS:
-            kinds[pid] = type(ai.build_provider(ai.resolve_provider(pid))).__name__
+        with mock.patch("core.ai.claude_code_provider.find_claude", return_value="claude"):
+            for pid in ai.PROVIDERS:
+                kinds[pid] = type(ai.build_provider(ai.resolve_provider(pid))).__name__
         self.assertEqual(
             kinds,
             {
@@ -463,6 +464,7 @@ class ConfigTests(SettingsTestCase):
                 "openai_compatible": "OpenAiProvider",
                 "anthropic": "AnthropicProvider",
                 "gemini": "GeminiProvider",
+                "claude_subscription": "ClaudeCodeProvider",
             },
         )
 

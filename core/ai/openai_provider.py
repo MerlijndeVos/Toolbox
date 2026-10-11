@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .usage import usage_from_openai
 from .base import (
     REQUEST_TIMEOUT,
     AiError,
@@ -62,7 +63,7 @@ class OpenAiProvider(Provider):
         choice = response.choices[0]
         if choice.finish_reason == "length":
             raise AiError("The reply was cut off (token limit). Try a model with a larger output limit.")
-        return parse_json(choice.message.content or "")
+        return self._finish(parse_json(choice.message.content or ""), usage_from_openai(getattr(response, "usage", None)))
 
     def _client(self, openai: Any) -> Any:
         return openai.OpenAI(

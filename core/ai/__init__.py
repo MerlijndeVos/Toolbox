@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from . import usage
 from .anthropic_provider import AnthropicProvider
+from .claude_code_provider import ClaudeCodeProvider
 from .base import (
     AiConfigError,
     AiError,
@@ -47,6 +49,7 @@ __all__ = [
     "build_provider",
     "get_provider",
     "parse_json",
+    "usage",
     "resolve_model",
     "resolve_provider",
     "save_ai_settings",
@@ -65,10 +68,15 @@ def build_provider(resolved: ResolvedProvider, *, http_client: Any = None) -> Pr
         http_client=http_client,
     )
     if resolved.id == "anthropic":
-        return AnthropicProvider(**kwargs)
-    if resolved.id == "gemini":
-        return GeminiProvider(**kwargs)
-    return OpenAiProvider(label=resolved.spec.label, **kwargs)
+        provider: Provider = AnthropicProvider(**kwargs)
+    elif resolved.id == "gemini":
+        provider = GeminiProvider(**kwargs)
+    elif resolved.id == "claude_subscription":
+        provider = ClaudeCodeProvider(**kwargs)
+    else:
+        provider = OpenAiProvider(label=resolved.spec.label, **kwargs)
+    provider.provider_id = resolved.id
+    return provider
 
 
 def get_provider(model: Optional[str] = None, *, http_client: Any = None) -> Provider:
@@ -95,7 +103,8 @@ def check_connection(
         {"role": "user", "content": "ping"},
     ]
     try:
-        provider.complete_json(messages)
+        with usage.feature("Connection test"):
+            provider.complete_json(messages)
     except InvalidJsonError as exc:
         raise AiError(
             f"Connected to {resolved.spec.label}, but {resolved.model} did not answer with valid JSON, "

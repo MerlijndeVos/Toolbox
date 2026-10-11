@@ -39,6 +39,14 @@ PROVIDERS: dict[str, ProviderSpec] = {
         ProviderSpec("openai_compatible", "OpenAI-compatible", "", needs_base_url=True, needs_key=False),
         ProviderSpec("anthropic", "Anthropic (Claude)", "claude-haiku-4-5-20251001", ("ANTHROPIC_API_KEY",)),
         ProviderSpec("gemini", "Google Gemini", "gemini-flash-latest", ("GEMINI_API_KEY", "GOOGLE_API_KEY")),
+        # Runs the local Claude Code CLI. The "key" is an optional `claude setup-token` token.
+        ProviderSpec(
+            "claude_subscription",
+            "Claude subscription",
+            "sonnet",
+            ("CLAUDE_CODE_OAUTH_TOKEN",),
+            needs_key=False,
+        ),
     )
 }
 DEFAULT_PROVIDER = "openai"
@@ -163,6 +171,14 @@ def validate(resolved: ResolvedProvider) -> None:
     spec = resolved.spec
     if spec.needs_base_url and not resolved.base_url:
         raise AiConfigError(f"{spec.label}: set the base URL in AI settings (for example http://localhost:11434/v1).")
+    if resolved.id == "claude_subscription":
+        from .claude_code_provider import find_claude
+
+        if not find_claude():
+            raise AiConfigError(
+                "Claude subscription: the `claude` command was not found. Install Claude Code "
+                "and sign in with /login, then try again."
+            )
     if spec.needs_key and not resolved.api_key:
         env = f" or set {spec.env_vars[0]}" if spec.env_vars else ""
         raise AiConfigError(f"{spec.label}: no API key configured. Add it in AI settings{env}.")

@@ -20,6 +20,7 @@ from core.ai import (
     resolve_provider,
     save_ai_settings,
     stored_ai_settings,
+    usage as ai_usage,
 )
 from core.download import probe_url
 from core.rename import preview_media_name
@@ -224,6 +225,28 @@ def ai_test(body: AiTestRequest) -> AiTestResponse:
     except Exception as exc:  # a broken SDK/TLS setup should still reach the UI as text
         return AiTestResponse(ok=False, message=f"Unexpected error: {exc}")
     return AiTestResponse(ok=True, message=message)
+
+
+@app.get("/api/ai/usage")
+def ai_usage_summary() -> dict:
+    """Token usage from the local ledger, plus the Claude plan windows when a subscription is used."""
+    return {**ai_usage.summary(), "provider": stored_ai_settings()["provider"]}
+
+
+@app.delete("/api/ai/usage")
+def ai_usage_clear() -> dict:
+    ai_usage.clear()
+    return {**ai_usage.summary(), "provider": stored_ai_settings()["provider"]}
+
+
+@app.post("/api/ai/usage/refresh")
+def ai_usage_refresh() -> dict:
+    """Make one tiny Claude call so the plan windows are current. Costs a few hundred tokens."""
+    try:
+        check_connection("claude_subscription")
+    except AiError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {**ai_usage.summary(), "provider": stored_ai_settings()["provider"]}
 
 
 @app.get("/api/rename/profiles", response_model=RenameProfilesResponse)

@@ -21,6 +21,7 @@ from .paths import clean_path_string, path_exists, path_is_dir, path_is_file
 from .progress import get_active_hooks
 from .rename import SUB_FLAG_TOKENS, split_subtitle_suffix
 from .ai import AiError, InvalidJsonError, Provider, get_provider, resolve_model
+from .ai import usage as ai_usage
 from .subtitle_languages import (
     LANGUAGE_LABELS,
     normalize_lang_code,
@@ -564,13 +565,14 @@ def _request_translations(
         style=style,
     )
     try:
-        parsed = provider.complete_json(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=TRANSLATE_TEMPERATURE,
-        ).data
+        with ai_usage.feature("Subtitle translation"):
+            parsed = provider.complete_json(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=TRANSLATE_TEMPERATURE,
+            ).data
         return _extract_translations(parsed)
     except AiError as exc:
         if isinstance(exc, InvalidJsonError):

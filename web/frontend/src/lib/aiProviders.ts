@@ -12,6 +12,10 @@ export interface AiProviderInfo {
   needsBaseUrl?: boolean;
   /** Local servers usually need no key. */
   keyOptional?: boolean;
+  /** Replaces the default API key hint. */
+  keyHint?: string;
+  /** Replaces the default privacy line. */
+  privacy?: string;
   /** Suggestions only; any model id can be typed. */
   modelPresets: string[];
   modelPlaceholder?: string;
@@ -56,6 +60,18 @@ export const AI_PROVIDERS: AiProviderInfo[] = [
     keyPlaceholder: "AIza…",
     envVar: "GEMINI_API_KEY",
     modelPresets: ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-pro"],
+  },
+  {
+    id: "claude_subscription",
+    label: "Claude subscription (Claude Code)",
+    keyPlaceholder: "Token from `claude setup-token` (optional)",
+    envVar: "CLAUDE_CODE_OAUTH_TOKEN",
+    keyOptional: true,
+    keyHint:
+      "Optional. Leave empty to use the account Claude Code is signed in with (run `claude`, then /login). A token from `claude setup-token` also works.",
+    privacy:
+      "Subtitle text is sent to Anthropic through the Claude Code program on this computer, using your Claude plan instead of an API key. Calls count against your plan's 5-hour and weekly limits.",
+    modelPresets: ["sonnet", "opus", "haiku", "fable"],
   },
 ];
 

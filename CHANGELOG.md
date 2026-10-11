@@ -14,6 +14,9 @@ Per-release write-ups live in `release-notes/`.
 - Each cue carries a reading-speed character budget, so translations stay readable on screen.
 - Ad and credit lines (web addresses, emails, release tags, "subtitles by") are dropped before translating; `--keep-junk` turns that off.
 
+- AI provider **Claude subscription**: translation and rename assist can run through the Claude Code program with your Pro/Max plan, no API key. An optional `claude setup-token` token is supported.
+- A **Usage** window on the AI page: tokens per day, per task and per model, recent calls, and the Claude plan's 5-hour and weekly limits with reset times.
+
 ### Changed
 - The model now sees 8 previous translated cues and the next 3 source cues, and keeps names consistent across batches.
 - When no language tag is in the filename, the model detects the source language instead of assuming English.

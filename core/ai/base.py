@@ -11,6 +11,9 @@ from typing import Any, Callable, Optional
 
 import httpx
 
+from . import usage as usage_ledger
+from .usage import Usage
+
 Message = dict  # {"role": "system" | "user" | "assistant", "content": str}
 
 JSON_ONLY_INSTRUCTION = (
@@ -46,12 +49,14 @@ class JsonResult:
 
     text: str
     data: Any
+    usage: Optional[Usage] = None
 
 
 class Provider(ABC):
     """One AI backend. Both features talk to this and nothing else."""
 
     label = "AI provider"
+    provider_id = ""
 
     def __init__(
         self,
@@ -75,6 +80,12 @@ class Provider(ABC):
         ``messages`` is a list of ``{"role", "content"}`` dicts, system first. Raises
         :class:`AiError` (readable message) on any failure.
         """
+
+
+    def _finish(self, result: JsonResult, usage: Optional[Usage]) -> JsonResult:
+        """Attach the call's usage to the result and add it to the ledger."""
+        usage_ledger.record(self.provider_id or self.label.lower(), self.model, usage, label=self.label)
+        return JsonResult(text=result.text, data=result.data, usage=usage)
 
 
 # ---------------------------------------------------------------------------

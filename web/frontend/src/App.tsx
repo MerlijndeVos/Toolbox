@@ -8,6 +8,7 @@ import { ToolsBanner } from "@/components/ToolsBanner";
 import { LoggingPanel } from "@/components/LoggingPanel";
 import { ModsPanel } from "@/components/ModsPanel";
 import { AiSettingsPanel } from "@/components/AiSettingsPanel";
+import { AiUsagePanel } from "@/components/AiUsagePanel";
 import { ToolPanel } from "@/components/ToolPanel";
 import { UpdateModal } from "@/components/UpdateModal";
 import { UpdatesPanel } from "@/components/UpdatesPanel";
@@ -329,7 +330,10 @@ export default function App() {
           ) : view === "logs" ? (
             <LoggingPanel onFileLoggingChange={setFileLogging} />
           ) : view === "ai" ? (
-            <AiSettingsPanel />
+            <div className="space-y-6">
+              <AiSettingsPanel />
+              <AiUsagePanel />
+            </div>
           ) : view === "updates" ? (
             <UpdatesPanel {...updates} />
           ) : view === "appearance" ? (

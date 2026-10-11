@@ -65,9 +65,11 @@ Subtitle translation (`subtitles.py`) and rename-profile generation (`rename_ai.
 | `openai_provider.py` | OpenAI **and** any OpenAI-compatible server (custom `base_url`), via the `openai` SDK. Uses `response_format=json_object`; if the server rejects it, retries with a prompt-only JSON instruction and remembers that per (URL, model) for the session |
 | `anthropic_provider.py` | Native Messages API over `httpx`. JSON comes from a forced tool call (there is no JSON mode) |
 | `gemini_provider.py` | Native `generateContent` API over `httpx` with `responseMimeType: application/json` |
+| `claude_code_provider.py` | Runs the local `claude -p` CLI (tool-less, empty working folder, `stream-json`) so a Claude subscription can be used without an API key; reads usage and the plan windows from its stream |
+| `usage.py` | Local ledger of tokens per call (`ai_usage.json` in the app data folder), per-feature labels, and the stored plan windows behind `/api/ai/usage` |
 | `config.py` | Which provider is selected, per-provider key/model/base URL, env-var fallback, validation |
 
-Settings live in `settings.json` under `ai` (`provider`, and `providers.<id>.{api_key, model, base_url}` for `openai`, `openai_compatible`, `anthropic`, `gemini`), so switching provider never loses another provider's key. A key saved in settings wins over `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`. Settings from before providers existed (flat `openai_api_key` / `openai_model`) are still read, and moved under `ai` the first time AI settings are saved. The API never returns keys, only whether one is set.
+Settings live in `settings.json` under `ai` (`provider`, and `providers.<id>.{api_key, model, base_url}` for `openai`, `openai_compatible`, `anthropic`, `gemini`, `claude_subscription`), so switching provider never loses another provider's key. A key saved in settings wins over `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`. Settings from before providers existed (flat `openai_api_key` / `openai_model`) are still read, and moved under `ai` the first time AI settings are saved. The API never returns keys, only whether one is set.
 
 To add a provider: write an adapter with `complete_json`, add a `ProviderSpec` in `config.py`, return it from `build_provider` in `__init__.py`, and add its entry to `web/frontend/src/lib/aiProviders.ts`.
 

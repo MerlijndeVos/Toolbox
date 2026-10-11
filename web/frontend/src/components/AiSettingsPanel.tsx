@@ -148,11 +148,15 @@ export function AiSettingsPanel() {
   }
 
   const local = info.needsBaseUrl === true && baseUrl.trim() !== "" && isLocalUrl(baseUrl);
-  const privacy = local
+  const privacy = info.privacy
+    ? info.privacy
+    : local
     ? "This is a local address, so your subtitles and file names stay on this computer."
     : `Subtitle text (translation) and example file names (AI rename profiles) are sent to ${info.label}.`;
 
-  const keyHint = saved.api_key_set
+  const keyHint = info.keyHint && !saved.api_key_set
+    ? info.keyHint
+    : saved.api_key_set
     ? saved.api_key_from_env
       ? `Using the ${info.envVar} environment variable. Paste a key here to override it.`
       : "A key is saved. Paste a new one to replace it."
@@ -208,7 +212,7 @@ export function AiSettingsPanel() {
             </Field>
           )}
 
-          <Field label="API key" hint={keyHint}>
+          <Field label={provider === "claude_subscription" ? "Token (optional)" : "API key"} hint={keyHint}>
             <div className="flex gap-2">
               <Input
                 type="password"

@@ -5,6 +5,7 @@ from __future__ import annotations
 from urllib.parse import quote
 
 from .base import AiError, HttpProvider, JsonResult, Message, parse_json, split_system
+from .usage import usage_from_gemini
 
 DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
@@ -49,4 +50,4 @@ class GeminiProvider(HttpProvider):
             raise AiError("The reply was cut off (token limit). Try a model with a larger output limit.")
         if not text and finish not in (None, "STOP"):
             raise AiError(f"Gemini stopped without an answer ({finish}).")
-        return parse_json(text)
+        return self._finish(parse_json(text), usage_from_gemini(body.get("usageMetadata")))

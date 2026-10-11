@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from .ai import InvalidJsonError, Provider, get_provider
+from .ai import usage as ai_usage
 from .dates import VIDEO_EXTENSIONS as DATE_VIDEO_EXTENSIONS
 from .dates import DateTuple, earliest_date_in_folder
 from .rename import SUBTITLE_EXTENSIONS, VIDEO_EXTENSIONS, preview_media_name
@@ -506,7 +507,8 @@ def generate_profile(
     last_error: Optional[str] = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
-            reply = provider.complete_json(messages, temperature=0)
+            with ai_usage.feature("Rename assist"):
+                reply = provider.complete_json(messages, temperature=0)
         except InvalidJsonError as exc:
             # Unusable JSON: let the model see what it sent and try again.
             last_error = str(exc)
