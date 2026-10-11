@@ -3,7 +3,7 @@
 import argparse
 from pathlib import Path
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from core.paths import clean_path_string
 from core.subtitles import run_subtitle_translate
@@ -17,6 +17,9 @@ class Params(BaseModel):
     glossary: str = ""
     notes: str = ""
     remove_junk: bool = True
+    model: str = ""
+    concurrency: int = Field(default=1, ge=1, le=4)
+    review: bool = False
     dry_run: bool = True
 
     @field_validator("input")
@@ -37,11 +40,23 @@ def run(params, ctx):
             notes=p.get("notes", ""),
             remove_junk=p.get("remove_junk", True),
             dry_run=p["dry_run"],
-            model=None,
+            model=(p.get("model") or "").strip() or None,
+            concurrency=p.get("concurrency", 1),
+            review=p.get("review", False),
         ),
         should_cancel=ctx.cancelled,
     )
-    if not p["dry_run"] and (report.untranslated or report.flagged):
+    if p["dry_run"] and report.est_requests:
+        ctx.result(
+            "counters",
+            title="Estimated cost of this translation",
+            items={
+                "Requests": report.est_requests,
+                "Input tokens (about)": report.est_input_tokens,
+                "Output tokens (about)": report.est_output_tokens,
+            },
+        )
+    if not p["dry_run"] and (report.untranslated or report.flagged or report.revised):
         ctx.result(
             "counters",
             title="Translation finished with warnings",
@@ -49,5 +64,6 @@ def run(params, ctx):
                 "Cues translated": report.total - report.untranslated,
                 "Kept original text": report.untranslated,
                 "May need a check": report.flagged,
+                "Improved by review": report.revised,
             },
         )

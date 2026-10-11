@@ -652,7 +652,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--input",
         required=True,
         type=Path,
-        help="SRT file or folder containing .srt files.",
+        help="Subtitle file (.srt, .vtt, .ass, .ssa) or folder containing them.",
     )
     subtitle_translate.add_argument(
         "--source-lang",
@@ -678,6 +678,24 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--notes",
         default="",
         help="Free-form notes for the translator, e.g. 'teen drama, informal register'.",
+    )
+    subtitle_translate.add_argument(
+        "--model",
+        default=None,
+        help="Model id for this run (default: the model saved in AI settings).",
+    )
+    subtitle_translate.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        choices=range(1, 5),
+        help="Batches translated at the same time (1-4). Above 1, a batch sees the earlier source lines "
+        "instead of their translations.",
+    )
+    subtitle_translate.add_argument(
+        "--review",
+        action="store_true",
+        help="Add an editing pass that fixes mistranslations and unnatural lines (about twice the tokens).",
     )
     subtitle_translate.add_argument(
         "--keep-junk",

@@ -1,6 +1,6 @@
 id = "subtitle_translate"
 name = "Translate"
-description = "Translate SRT subtitles to another language with your AI provider."
+description = "Translate SRT, WebVTT and ASS subtitles to another language with your AI provider."
 version = "1.0.0"
 author = "Toolbox"
 api_version = 1

@@ -10,6 +10,7 @@ import {
   CheckField,
   Field,
   LanguageCombobox,
+  SelectField,
   ToolRunActions,
 } from "@/components/fields";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ function basename(path: string): string {
 }
 
 function detectLangFromFilename(path: string, languages: SubtitleLanguage[]): string | null {
-  const stem = basename(path).replace(/\.srt$/i, "");
+  const stem = basename(path).replace(/\.(srt|vtt|ass|ssa)$/i, "");
   const parts = stem.split(".");
   const codes = new Set(languages.map((l) => l.code.toLowerCase()));
   while (parts.length > 1) {
@@ -51,11 +52,13 @@ function SubtitlePathInput({
   onChange,
   hint,
   placeholder = "C:\\media\\Show.en.srt or folder",
+  label = "SRT file or folder",
 }: {
   value: string;
   onChange: (value: string) => void;
   hint: string;
   placeholder?: string;
+  label?: string;
 }) {
   const [picking, setPicking] = useState(false);
 
@@ -81,7 +84,7 @@ function SubtitlePathInput({
   };
 
   return (
-    <Field label="SRT file or folder" hint={hint}>
+    <Field label={label} hint={hint}>
       <div className="flex flex-wrap gap-2">
         <Input
           value={value}
@@ -306,6 +309,9 @@ export function SubtitleTranslateForm({
   const [targetLang, setTargetLang] = useState("en");
   const [overwrite, setOverwrite] = useState(false);
   const [removeJunk, setRemoveJunk] = useState(true);
+  const [review, setReview] = useState(false);
+  const [concurrency, setConcurrency] = useState("1");
+  const [model, setModel] = useState("");
   const [glossary, setGlossary] = useState("");
   const [notes, setNotes] = useState("");
   const [languages, setLanguages] = useState<SubtitleLanguage[]>([]);
@@ -330,6 +336,9 @@ export function SubtitleTranslateForm({
     target_lang: targetLang,
     overwrite,
     remove_junk: removeJunk,
+    review,
+    concurrency: Number(concurrency),
+    model: model.trim(),
     glossary,
     notes,
     dry_run: dryRun,
@@ -342,7 +351,9 @@ export function SubtitleTranslateForm({
       <SubtitlePathInput
         value={input}
         onChange={setInput}
-        hint="Output uses the target language suffix, e.g. Show.en.srt → Show.de.srt."
+        label="Subtitle file or folder"
+        placeholder={"C:\\media\\Show.en.srt (or .vtt, .ass) or folder"}
+        hint="SRT, WebVTT and ASS/SSA. Output keeps the format and uses the target language suffix, e.g. Show.en.srt → Show.de.srt."
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -377,6 +388,31 @@ export function SubtitleTranslateForm({
         hint="Removes lines with web addresses, emails, release tags and “subtitles by …” credits before translating."
       />
 
+      <CheckField
+        label="Review pass"
+        checked={review}
+        onChange={setReview}
+        hint="A second editing pass fixes mistranslations and unnatural lines. Uses about twice the tokens."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SelectField
+          label="Batches at once"
+          value={concurrency}
+          onChange={setConcurrency}
+          options={[
+            { value: "1", label: "1 (best continuity)" },
+            { value: "2", label: "2" },
+            { value: "3", label: "3" },
+            { value: "4", label: "4 (fastest)" },
+          ]}
+          hint="Above 1, each batch sees the earlier source lines instead of their translations."
+        />
+        <Field label="Model for this run" hint="Optional. Leave empty to use the model in AI settings.">
+          <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="e.g. sonnet" />
+        </Field>
+      </div>
+
       <Field label="Notes for the translator" hint="Optional, e.g. “Teen drama, informal register, keep English names”.">
         <textarea
           className={TEXTAREA_CLASS}
@@ -402,7 +438,7 @@ export function SubtitleTranslateForm({
         onPreview={() => onRun(runParams(true))}
         onApply={() => onRun(runParams(false))}
         disabled={disabled || !canRun}
-        applyHint="Writes new translated SRT files next to the originals."
+        applyHint="Writes new translated subtitle files next to the originals."
       />
     </div>
   );

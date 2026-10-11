@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Sequence, Set
@@ -22,6 +23,13 @@ from .progress import get_active_hooks
 from .rename import SUB_FLAG_TOKENS, split_subtitle_suffix
 from .ai import AiError, InvalidJsonError, Provider, get_provider, resolve_model
 from .ai import usage as ai_usage
+from .subtitle_formats import (
+    SUPPORTED_EXTENSIONS,
+    SubtitleCue,
+    format_srt,
+    load_subtitle,
+    parse_srt,
+)
 from .subtitle_languages import (
     LANGUAGE_LABELS,
     normalize_lang_code,
@@ -33,8 +41,9 @@ CONTEXT_CUES = 8
 LOOKAHEAD_CUES = 3
 # Reading speed the per-cue character budget is derived from (characters per second).
 TARGET_CPS = 17
+MAX_CONCURRENCY = 4
 PLACEHOLDER_RE = re.compile(r"\u27e6\d+\u27e7")
-TIME_RE = re.compile(r"(\d+):(\d+):(\d+)[,.](\d+)")
+TIME_RE = re.compile(r"(?:(\d+):)?(\d+):(\d+)[,.](\d+)")
 # Junk reasons removed automatically before translating. Bracket lines are left alone: they are
 # often legitimate sound captions such as [door slams].
 AUTO_JUNK_REASONS = {"url", "email", "credit_line", "release_tag"}
@@ -70,18 +79,6 @@ JUNK_REASON_LABELS = {
     "release_tag": "Release group tag",
     "noise": "Non-dialogue noise line",
 }
-
-
-@dataclass
-class SubtitleCue:
-    index: int
-    start: str
-    end: str
-    lines: list[str] = field(default_factory=list)
-
-    @property
-    def text(self) -> str:
-        return "\n".join(self.lines)
 
 
 @dataclass
@@ -136,56 +133,25 @@ def build_output_path(src: Path, target_lang: str) -> Path:
     return src.with_name(f"{base}.{new_suffix}{src.suffix}")
 
 
-def collect_srt_files(input_path: Path) -> list[Path]:
+def collect_srt_files(
+    input_path: Path, extensions: Sequence[str] = (SRT_EXTENSION,)
+) -> list[Path]:
+    """The subtitle file, or every subtitle file under a folder (SRT only unless told otherwise)."""
     input_path = Path(clean_path_string(str(input_path)))
+    wanted = {e.lower() for e in extensions}
+    names = ", ".join(sorted(wanted))
     if path_is_file(input_path):
-        if input_path.suffix.lower() != SRT_EXTENSION:
-            raise ValueError(f"Not an SRT file: {input_path}")
+        if input_path.suffix.lower() not in wanted:
+            raise ValueError(f"Not a supported subtitle file ({names}): {input_path}")
         return [input_path]
     if not path_is_dir(input_path):
         raise ValueError(f"Input path not found: {input_path}")
     files = sorted(
-        p for p in input_path.rglob("*") if path_is_file(p) and p.suffix.lower() == SRT_EXTENSION
+        p for p in input_path.rglob("*") if path_is_file(p) and p.suffix.lower() in wanted
     )
     if not files:
-        raise ValueError(f"No .srt files found under {input_path}")
+        raise ValueError(f"No {names} files found under {input_path}")
     return files
-
-
-def parse_srt(content: str) -> list[SubtitleCue]:
-    text = content.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").strip()
-    if not text:
-        return []
-
-    blocks = re.split(r"\n\s*\n", text)
-    cues: list[SubtitleCue] = []
-    for block in blocks:
-        lines = [ln for ln in block.split("\n") if ln.strip() or ln == ""]
-        if len(lines) < 2:
-            continue
-        try:
-            index = int(lines[0].strip())
-        except ValueError:
-            continue
-        timing = lines[1]
-        if "-->" not in timing:
-            continue
-        start, end = [part.strip() for part in timing.split("-->", 1)]
-        body = lines[2:]
-        while body and not body[-1].strip():
-            body.pop()
-        cues.append(SubtitleCue(index=index, start=start, end=end, lines=body))
-    return cues
-
-
-def format_srt(cues: Sequence[SubtitleCue]) -> str:
-    parts: list[str] = []
-    for i, cue in enumerate(cues, start=1):
-        parts.append(str(i))
-        parts.append(f"{cue.start} --> {cue.end}")
-        parts.extend(cue.lines)
-        parts.append("")
-    return "\n".join(parts).rstrip() + "\n"
 
 
 def _junk_reason(line: str) -> Optional[str]:
@@ -307,7 +273,7 @@ def _build_translation_prompts(
     *,
     source_lang: str,
     target_lang: str,
-    context_pairs: Sequence[tuple[str, str]],
+    context_pairs: Sequence[tuple[str, Optional[str]]],
     lookahead: Sequence[str] = (),
     style: Optional["TranslationStyle"] = None,
 ) -> tuple[str, str]:
@@ -358,12 +324,16 @@ def _build_translation_prompts(
             parts.append(f"  {term} -> {target}" if target else f"  {term} (keep as is, do not translate)")
         parts.append("")
     if context_pairs:
-        parts.append(
-            "Previously translated lines (for dialogue continuity, do NOT re-translate these):"
-        )
+        if any(tgt is None for _src, tgt in context_pairs):
+            parts.append("Earlier lines (context only, do NOT translate these):")
+        else:
+            parts.append(
+                "Previously translated lines (for dialogue continuity, do NOT re-translate these):"
+            )
         for src, tgt in context_pairs:
             parts.append(f"  [{source_label}] {src}")
-            parts.append(f"  [{target_lang}] {tgt}")
+            if tgt is not None:
+                parts.append(f"  [{target_lang}] {tgt}")
         parts.append("")
     if lookahead:
         parts.append("Upcoming lines (context only, do NOT translate these):")
@@ -438,7 +408,7 @@ def _seconds(stamp: str) -> Optional[float]:
     if not match:
         return None
     h, m, sec, frac = match.groups()
-    return int(h) * 3600 + int(m) * 60 + int(sec) + int(frac) / (10 ** len(frac))
+    return int(h or 0) * 3600 + int(m) * 60 + int(sec) + int(frac) / (10 ** len(frac))
 
 
 def char_budget(cue: SubtitleCue) -> Optional[int]:
@@ -457,6 +427,10 @@ class TranslationReport:
     untranslated: int = 0
     flagged: int = 0
     resumed_batches: int = 0
+    revised: int = 0
+    est_input_tokens: int = 0
+    est_output_tokens: int = 0
+    est_requests: int = 0
 
     @property
     def clean(self) -> bool:
@@ -674,6 +648,83 @@ def _translate_batch(
     return texts
 
 
+def _review_batch(
+    provider: Provider,
+    batch: Sequence[SubtitleCue],
+    texts: list[str],
+    *,
+    source_lang: str,
+    target_lang: str,
+    style: Optional[TranslationStyle],
+    logger: logging.Logger,
+    should_cancel: Optional[Callable[[], bool]],
+    report: TranslationReport,
+) -> list[str]:
+    """Second pass: a stricter editor reads source and draft side by side and fixes real errors."""
+    _check_cancel(should_cancel)
+    auto = source_lang == "auto"
+    system_prompt = (
+        "You are a senior subtitle editor. For each cue you get the source text and a draft "
+        f"translation into {_language_name(target_lang)}"
+        + ("" if auto else f" from {_language_name(source_lang)}")
+        + ". Fix real problems only: mistranslations, unnatural phrasing, inconsistent names, "
+        "wrong register, or text longer than max_chars. Leave good lines alone. Keep formatting "
+        "tags and line breaks exactly as in the draft. Return JSON only: "
+        '{"edits": [{"id": <id>, "text": "<improved subtitle>"}]} with only the cues you changed, '
+        'or {"edits": []} when nothing needs changing.'
+    )
+    lines: list[str] = []
+    if style is not None and style.notes:
+        lines.append(f"Notes about this material: {style.notes}")
+    if style is not None and style.glossary:
+        lines.append("Glossary:")
+        lines.extend(
+            f"  {term} -> {target}" if target else f"  {term} (keep as is)" for term, target in style.glossary
+        )
+    payload = []
+    for i, (cue, draft) in enumerate(zip(batch, texts)):
+        item: dict[str, object] = {"id": i + 1, "source": cue.text, "draft": draft}
+        budget = char_budget(cue)
+        if budget is not None:
+            item["max_chars"] = budget
+        payload.append(item)
+    lines.append(json.dumps(payload, ensure_ascii=False))
+    try:
+        with ai_usage.feature("Subtitle review"):
+            parsed = provider.complete_json(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "\n".join(lines)},
+                ],
+                temperature=TRANSLATE_TEMPERATURE,
+            ).data
+        edits = _extract_translations(parsed)
+    except AiError as exc:
+        if isinstance(exc, InvalidJsonError):
+            logger.warning("%s review reply was not valid JSON; keeping the draft.", provider.label)
+            return texts
+        raise
+    except RuntimeError:
+        return texts
+
+    out = list(texts)
+    for local, revised in edits.items():
+        i = local - 1
+        if not 0 <= i < len(out) or revised == out[i]:
+            continue
+        revised_lines = revised.replace("\r\n", "\n").split("\n")
+        ok = (
+            revised.strip()
+            and all(ln.strip() for ln in revised_lines)
+            and len(revised_lines) <= max(len(batch[i].lines), 2)
+            and sorted(TAG_RE.findall(revised)) == sorted(TAG_RE.findall(out[i]))
+        )
+        if ok:
+            out[i] = revised
+            report.revised += 1
+    return out
+
+
 def translate_cues_batch(
     cues: list[SubtitleCue],
     *,
@@ -688,11 +739,15 @@ def translate_cues_batch(
     checkpoint: Optional[dict[int, list[str]]] = None,
     on_batch_done: Optional[Callable[[int, list[str]], None]] = None,
     style: Optional[TranslationStyle] = None,
+    concurrency: int = 1,
+    review: bool = False,
 ) -> list[SubtitleCue]:
     """Translate cues batch by batch.
 
     ``checkpoint`` maps batch number to already translated texts (resume); ``on_batch_done``
-    is called with each freshly translated batch so the caller can persist it.
+    is called with each freshly translated batch so the caller can persist it. With
+    ``concurrency`` above 1 batches run side by side and each sees the earlier *source* lines
+    as context instead of their translations. ``review`` adds an editing pass per batch.
     """
     if not cues:
         return []
@@ -701,53 +756,63 @@ def translate_cues_batch(
     report.total += len(cues)
     provider = provider or get_provider(model)
 
-    translated: list[SubtitleCue] = []
-    total_batches = max(1, (len(cues) + TRANSLATE_BATCH_SIZE - 1) // TRANSLATE_BATCH_SIZE)
-    for batch_num, batch_start in enumerate(range(0, len(cues), TRANSLATE_BATCH_SIZE), start=1):
-        _check_cancel(should_cancel)
-        batch = cues[batch_start : batch_start + TRANSLATE_BATCH_SIZE]
-        saved = (checkpoint or {}).get(batch_num)
-        if saved is not None and len(saved) == len(batch):
-            texts = saved
-            report.resumed_batches += 1
-        else:
-            context_pairs = [
-                (cues[i].text, translated[i].text)
-                for i in range(max(0, batch_start - CONTEXT_CUES), batch_start)
-                if i < len(translated)
-            ]
-            texts = _translate_batch(
+    size = TRANSLATE_BATCH_SIZE
+    starts = list(range(0, len(cues), size))
+    total_batches = max(1, len(starts))
+    results: dict[int, list[str]] = {}
+    done_cues = 0
+
+    def batch_of(batch_start: int) -> list[SubtitleCue]:
+        return cues[batch_start : batch_start + size]
+
+    def lookahead_of(batch_start: int) -> list[str]:
+        after = batch_start + size
+        return [c.text for c in cues[after : after + LOOKAHEAD_CUES]]
+
+    def work(batch_start: int, context_pairs: Sequence[tuple[str, Optional[str]]]) -> tuple[list[str], TranslationReport]:
+        batch = batch_of(batch_start)
+        local = TranslationReport()
+        texts = _translate_batch(
+            provider,
+            batch,
+            source_lang=source_lang,
+            target_lang=target_lang,
+            context_pairs=context_pairs,
+            lookahead=lookahead_of(batch_start),
+            style=style,
+            logger=logger,
+            should_cancel=should_cancel,
+            report=local,
+        )
+        if review:
+            texts = _review_batch(
                 provider,
                 batch,
+                texts,
                 source_lang=source_lang,
                 target_lang=target_lang,
-                context_pairs=context_pairs,
-                lookahead=[
-                    c.text for c in cues[batch_start + len(batch) : batch_start + len(batch) + LOOKAHEAD_CUES]
-                ],
                 style=style,
                 logger=logger,
                 should_cancel=should_cancel,
-                report=report,
+                report=local,
             )
-            if on_batch_done is not None:
-                on_batch_done(batch_num, texts)
+        return texts, local
 
-        by_id = {i + 1: text for i, text in enumerate(texts)}
-        for cue, text in zip(batch, texts):
-            lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-            translated.append(SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=lines))
+    def finish(batch_num: int, batch_start: int, texts: list[str], fresh: bool) -> None:
+        nonlocal done_cues
+        batch = batch_of(batch_start)
+        results[batch_num] = texts
+        if fresh and on_batch_done is not None:
+            on_batch_done(batch_num, texts)
+        done_cues += len(batch)
         logger.info(
-            "Translated cues %d–%d of %d.",
-            batch_start + 1,
-            batch_start + len(batch),
-            len(cues),
+            "Translated cues %d–%d of %d.", batch_start + 1, batch_start + len(batch), len(cues)
         )
         if on_progress is not None:
-            cues_done = batch_start + len(batch)
+            by_id = {i + 1: text for i, text in enumerate(texts)}
             on_progress(
                 {
-                    "file_pct": cues_done / len(cues) * 100,
+                    "file_pct": done_cues / len(cues) * 100,
                     "batch": batch_num,
                     "total_batches": total_batches,
                     "status": f"Batch {batch_num}/{total_batches}",
@@ -755,7 +820,82 @@ def translate_cues_batch(
                 }
             )
 
+    def merge(local: TranslationReport) -> None:
+        report.untranslated += local.untranslated
+        report.flagged += local.flagged
+        report.revised += local.revised
+
+    def saved_for(batch_num: int, batch_start: int) -> Optional[list[str]]:
+        saved = (checkpoint or {}).get(batch_num)
+        if saved is not None and len(saved) == len(batch_of(batch_start)):
+            report.resumed_batches += 1
+            return saved
+        return None
+
+    numbered = list(enumerate(starts, start=1))
+    if concurrency <= 1 or len(numbered) <= 1:
+        for batch_num, batch_start in numbered:
+            _check_cancel(should_cancel)
+            saved = saved_for(batch_num, batch_start)
+            if saved is not None:
+                finish(batch_num, batch_start, saved, fresh=False)
+                continue
+            translated_so_far = [t for n in sorted(results) for t in results[n]]
+            context_pairs = [
+                (cues[i].text, translated_so_far[i])
+                for i in range(max(0, batch_start - CONTEXT_CUES), batch_start)
+                if i < len(translated_so_far)
+            ]
+            texts, local = work(batch_start, context_pairs)
+            merge(local)
+            finish(batch_num, batch_start, texts, fresh=True)
+    else:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(max_workers=min(concurrency, MAX_CONCURRENCY)) as pool:
+            futures = {}
+            for batch_num, batch_start in numbered:
+                saved = saved_for(batch_num, batch_start)
+                if saved is not None:
+                    finish(batch_num, batch_start, saved, fresh=False)
+                    continue
+                context_pairs = [(cues[i].text, None) for i in range(max(0, batch_start - CONTEXT_CUES), batch_start)]
+                futures[pool.submit(work, batch_start, context_pairs)] = (batch_num, batch_start)
+            try:
+                for future in as_completed(futures):
+                    texts, local = future.result()
+                    batch_num, batch_start = futures[future]
+                    merge(local)
+                    finish(batch_num, batch_start, texts, fresh=True)
+            except BaseException:
+                for future in futures:
+                    future.cancel()
+                raise
+
+    translated: list[SubtitleCue] = []
+    for batch_num, batch_start in numbered:
+        for cue, text in zip(batch_of(batch_start), results[batch_num]):
+            lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+            translated.append(SubtitleCue(index=cue.index, start=cue.start, end=cue.end, lines=lines))
     return translated
+
+
+def estimate_translation(cues: Sequence[SubtitleCue], style: Optional[TranslationStyle], review: bool) -> tuple[int, int, int]:
+    """Rough (input tokens, output tokens, requests) for a file, for the dry run."""
+    chars = sum(len(c.text) for c in cues)
+    source_tokens = chars / 3.6
+    requests = max(1, -(-len(cues) // TRANSLATE_BATCH_SIZE))
+    style_chars = 0
+    if style is not None:
+        style_chars = len(style.notes) + sum(len(t) + len(g or "") + 6 for t, g in style.glossary)
+    prompt = 520 + (CONTEXT_CUES + LOOKAHEAD_CUES) * 14 + style_chars / 3.6
+    tokens_in = source_tokens + len(cues) * 14 + requests * prompt
+    tokens_out = source_tokens * 1.2 + len(cues) * 14
+    if review:
+        tokens_in = tokens_in * 2.1
+        tokens_out = tokens_out * 1.15
+        requests *= 2
+    return int(tokens_in), int(tokens_out), requests
 
 
 def _checkpoint_path(content_hash: str, target_lang: str, model: str) -> Path:
@@ -800,6 +940,8 @@ def process_srt_file(
     report: Optional[TranslationReport] = None,
     style: Optional[TranslationStyle] = None,
     remove_junk: bool = False,
+    concurrency: int = 1,
+    review: bool = False,
 ) -> Optional[Path]:
     def emit_progress(payload: dict) -> None:
         if on_progress is None:
@@ -825,7 +967,8 @@ def process_srt_file(
         return None
 
     content = read_subtitle_text(src, logger)
-    cues = parse_srt(content)
+    loaded = load_subtitle(src, content)
+    cues = loaded.cues
     if not cues:
         logger.warning("Skip %s: no cues parsed.", src.name)
         return None
@@ -853,6 +996,18 @@ def process_srt_file(
             resolved_source,
             target_lang,
         )
+        tokens_in, tokens_out, requests = estimate_translation(cues, style, review)
+        if report is not None:
+            report.est_input_tokens += tokens_in
+            report.est_output_tokens += tokens_out
+            report.est_requests += requests
+        logger.info(
+            "Estimate for %s: about %d input and %d output tokens in %d request(s).",
+            src.name,
+            tokens_in,
+            tokens_out,
+            requests,
+        )
         emit_progress({"file_pct": 100, "status": "Preview"})
         return dst
 
@@ -860,18 +1015,21 @@ def process_srt_file(
     checkpoint_file = _checkpoint_path(
         hashlib.sha256(format_srt(cues).encode("utf-8")).hexdigest(),
         target_lang,
-        f"{model or ''}|{resolved_source}|{style.key() if style else ''}",
+        f"{model or ''}|{resolved_source}|{style.key() if style else ''}|{'r' if review else ''}",
     )
     saved = _load_checkpoint(checkpoint_file)
     if saved:
         logger.info("Resuming %s: %d batch(es) already translated.", src.name, len(saved))
 
+    save_lock = threading.Lock()
+
     def remember(batch_num: int, texts: list[str]) -> None:
-        saved[batch_num] = texts
-        try:
-            _write_atomic(checkpoint_file, json.dumps(saved, ensure_ascii=False))
-        except OSError:
-            pass
+        with save_lock:
+            saved[batch_num] = texts
+            try:
+                _write_atomic(checkpoint_file, json.dumps(saved, ensure_ascii=False))
+            except OSError:
+                pass
 
     report = report if report is not None else TranslationReport()
     untranslated_before = report.untranslated
@@ -887,8 +1045,10 @@ def process_srt_file(
         checkpoint=saved,
         on_batch_done=remember,
         style=style,
+        concurrency=concurrency,
+        review=review,
     )
-    _write_atomic(dst, format_srt(translated))
+    _write_atomic(dst, loaded.render(translated))
     try:
         checkpoint_file.unlink()
     except OSError:
@@ -968,7 +1128,7 @@ def run_subtitle_translate(
     logger.info("Subtitle translate: input=%s target=%s dry_run=%s", input_path, target_lang, args.dry_run)
 
     model = resolve_model(getattr(args, "model", None))
-    files = collect_srt_files(input_path)
+    files = collect_srt_files(input_path, SUPPORTED_EXTENSIONS)
     if len(files) > 1 or path_is_dir(Path(clean_path_string(str(input_path)))):
         files = plan_translation_files(files, target_lang, logger)
         if not files:
@@ -981,6 +1141,8 @@ def run_subtitle_translate(
         glossary_text = read_subtitle_text(Path(glossary_file), logger)
     style = TranslationStyle.parse(glossary_text, getattr(args, "notes", "") or "")
     remove_junk = bool(getattr(args, "remove_junk", True))
+    concurrency = max(1, min(MAX_CONCURRENCY, int(getattr(args, "concurrency", 1) or 1)))
+    review = bool(getattr(args, "review", False))
 
     hooks = get_active_hooks()
     progress_cb = hooks.on_progress
@@ -1006,6 +1168,8 @@ def run_subtitle_translate(
                 report=report,
                 style=style,
                 remove_junk=remove_junk,
+                concurrency=concurrency,
+                review=review,
             )
         except AiError as exc:
             # Provider-level problems (bad key, quota, unreachable) hit every file alike.

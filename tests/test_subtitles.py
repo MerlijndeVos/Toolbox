@@ -235,6 +235,28 @@ class FileTests(unittest.TestCase):
         self.assertEqual(parse_srt(dst.read_text(encoding="utf-8"))[0].lines, ["Hallo"])
         self.assertFalse((self.dir / "Show.nl.srt.tmp").exists())
 
+    def test_vtt_file_is_translated_in_its_own_format(self):
+        src = self.write("Clip.en.vtt", "WEBVTT\n\n00:01.000 --> 00:02.000\nHello\n")
+        provider = Scripted([answer("Hallo")])
+        kwargs = dict(
+            target_lang="nl", source_lang="en", model="fake", clean_junk=False,
+            confirmed_removals=set(), dry_run=False, overwrite=True, logger=LOG,
+        )
+        with mock.patch.object(subtitles, "get_provider", return_value=provider):
+            dst = process_srt_file(src, **kwargs)
+        self.assertEqual(dst.name, "Clip.nl.vtt")
+        self.assertEqual(dst.read_text(encoding="utf-8"), "WEBVTT\n\n00:01.000 --> 00:02.000\nHallo\n")
+
+    def test_dry_run_reports_an_estimate(self):
+        src = self.write("Show.en.srt", "1\n00:00:01,000 --> 00:00:02,000\nHello there\n")
+        report = TranslationReport()
+        process_srt_file(
+            src, target_lang="nl", source_lang="en", model="fake", clean_junk=False,
+            confirmed_removals=set(), dry_run=True, overwrite=True, logger=LOG, report=report,
+        )
+        self.assertEqual(report.est_requests, 1)
+        self.assertGreater(report.est_input_tokens, 0)
+
     def test_one_failing_file_does_not_stop_the_folder(self):
         self.write("a.en.srt", "1\n00:00:01,000 --> 00:00:02,000\nHello\n")
         self.write("b.en.srt", "1\n00:00:01,000 --> 00:00:02,000\nWorld\n")

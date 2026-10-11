@@ -16,6 +16,9 @@ Per-release write-ups live in `release-notes/`.
 
 - AI provider **Claude subscription**: translation and rename assist can run through the Claude Code program with your Pro/Max plan, no API key. An optional `claude setup-token` token is supported.
 - A **Usage** window on the AI page: tokens per day, per task and per model, recent calls, and the Claude plan's 5-hour and weekly limits with reset times.
+- Translate reads and writes WebVTT (`.vtt`) and ASS/SSA (`.ass`, `.ssa`) as well as SRT, keeping styles, positions, notes and non-dialogue lines as they were.
+- Translate can run up to 4 batches at once, add a review pass that fixes mistranslations, and take a model for the run (`--concurrency`, `--review`, `--model`).
+- Preview shows an estimate of the requests and tokens a translation will use.
 
 ### Changed
 - The model now sees 8 previous translated cues and the next 3 source cues, and keeps names consistent across batches.
