@@ -15,6 +15,8 @@ import json
 import os
 import shutil
 import subprocess
+import tempfile
+from pathlib import Path
 from typing import Any, Optional
 
 from ..subprocess_utils import no_window_kwargs
@@ -47,9 +49,12 @@ def find_claude() -> Optional[str]:
 
 
 def _workdir() -> str:
-    from ..runtime import app_data_dir
+    """An empty folder to run in, so no project CLAUDE.md or settings are picked up.
 
-    path = app_data_dir() / "claude_cwd"
+    The system temp folder is used rather than the app data folder: a sandboxed or packaged
+    Python can see a different AppData than the ``claude`` program does.
+    """
+    path = Path(tempfile.gettempdir()) / "toolbox-claude"
     path.mkdir(parents=True, exist_ok=True)
     return str(path)
 
