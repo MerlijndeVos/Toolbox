@@ -9,7 +9,6 @@ Per-release write-ups live in `release-notes/`.
 - Subtitle translation re-asks only for cues the model skipped, answered badly, or returned with changed tags or odd line breaks, then falls back to one cue at a time.
 - Translated batches are checkpointed, so a retry after a failure or cancel resumes instead of paying again.
 - After a run with problems, the Translate tool shows how many cues kept their original text or may need a check.
-
 - Translate keeps `<i>`, `{\an8}` and other formatting tags safe by swapping them for markers the model cannot rewrite.
 - Translate takes a glossary (`term = translation`, or a bare term to keep as is) and free-form notes about the show, in the form and on the CLI (`--glossary-file`, `--notes`).
 - Each cue carries a reading-speed character budget, so translations stay readable on screen.
