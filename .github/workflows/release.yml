@@ -10,8 +10,31 @@ permissions:
   contents: write
 
 jobs:
+  guard:
+    name: Release only from production
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Require the commit to be on the production branch
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            git fetch --no-tags origin production
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/production; then
+              echo "Tag $GITHUB_REF_NAME is not on the production branch. Merge main into production first, then tag the production commit."
+              exit 1
+            fi
+          elif [ "$GITHUB_REF" != "refs/heads/production" ]; then
+            echo "Run this workflow from the production branch (it ran from $GITHUB_REF)."
+            exit 1
+          fi
+
   build:
     name: Build (${{ matrix.os }})
+    needs: guard
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false

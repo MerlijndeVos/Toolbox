@@ -77,9 +77,14 @@ git add pyproject.toml release-notes/v0.2.0.md
 git commit -m "Release v0.2.0"
 git push origin main
 
-# 3. Tag and push — CI builds Windows, macOS, and Linux installers
+# 3. Releases come from the production branch: fast-forward it to main
+git switch production && git merge --ff-only main && git push origin production
+
+# 4. Tag the production commit and push the tag — CI builds Windows, macOS, and Linux installers
 git tag v0.2.0 && git push origin v0.2.0
 ```
+
+`main` is where work lands; `production` is the branch releases are cut from. CI refuses a version tag (or a manual run) whose commit is not on `production`.
 
 Local Windows bundle:
 

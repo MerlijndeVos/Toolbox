@@ -101,7 +101,7 @@ pip install -e ".[desktop,pack]"
 # Optional: iscc packaging\windows\setup.iss
 ```
 
-Push a version tag to trigger CI builds for all three platforms:
+Releases are cut from the `production` branch (see CONTRIBUTING.md). Push a version tag on a `production` commit to trigger CI builds for all three platforms:
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
