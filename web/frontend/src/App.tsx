@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bot, Download, House, Palette, Puzzle, ScrollText, Wifi, WifiOff } from "lucide-react";
+import { Bot, Download, House, Palette, Puzzle, ScrollText, type LucideIcon } from "lucide-react";
 import { checkHealth, fetchSettings } from "@/api/client";
 import { AppearancePanel } from "@/components/AppearancePanel";
 import { HomePanel } from "@/components/HomePanel";
@@ -12,6 +12,8 @@ import { AiUsagePanel } from "@/components/AiUsagePanel";
 import { ToolPanel } from "@/components/ToolPanel";
 import { UpdateModal } from "@/components/UpdateModal";
 import { UpdatesPanel } from "@/components/UpdatesPanel";
+import { StatusPill } from "@/components/ui/status-pill";
+import { modIcon } from "@/lib/modIcons";
 import { cn } from "@/lib/utils";
 import { isDesktopApp } from "@/lib/desktop";
 import { groupStyle } from "@/lib/groups";
@@ -22,6 +24,65 @@ import type { DownloadJobMeta, ToolId } from "@/lib/types";
 import { useJobRunner } from "@/hooks/useJobRunner";
 
 type AppView = "home" | "tools" | "logs" | "ai" | "updates" | "appearance" | "mods";
+
+/** The Toolbox glyph: three tiles and a turned one, stroked in the text colour. */
+function ToolboxMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 36 36"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <rect x="6.5" y="6.5" width="9" height="9" rx="2" />
+      <rect x="20.5" y="6.5" width="9" height="9" rx="2" />
+      <rect x="6.5" y="20.5" width="9" height="9" rx="2" />
+      <rect x="21.6" y="21.6" width="7" height="7" rx="1.6" transform="rotate(45 25.1 25.1)" />
+    </svg>
+  );
+}
+
+function NavItem({
+  current,
+  icon: Icon,
+  onClick,
+  badge,
+  quiet,
+  children,
+}: {
+  current: boolean;
+  icon: LucideIcon;
+  onClick: () => void;
+  badge?: string;
+  quiet?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={current ? "page" : undefined}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        current
+          ? "bg-muted font-medium text-foreground"
+          : cn("hover:bg-muted hover:text-foreground", quiet ? "text-muted-foreground/70" : "text-muted-foreground"),
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {badge && (
+        <span className="shrink-0 rounded-full bg-ring/10 px-1.5 py-0.5 text-[11px] font-medium text-ring">
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export default function App() {
   const updates = useUpdates();
@@ -139,227 +200,178 @@ export default function App() {
     }
   };
 
+  const toolName = useMemo(
+    () => mods.groups.flatMap((g) => g.mods).find((m) => m.id === tool)?.name,
+    [mods.groups, tool],
+  );
+  const title =
+    view === "home"
+      ? "Home"
+      : view === "tools"
+        ? (toolName ?? "Tool")
+        : { logs: "Logs", ai: "AI", updates: "Updates", appearance: "Appearance", mods: "Mods" }[view];
+  const currentVersion = updates.check?.current_version;
+  const apiLabel = apiOk === true ? "API connected" : apiOk === false ? "API offline" : "Checking…";
+
   return (
     <div className="min-h-screen" style={{ paddingBottom: logHeight }}>
       <ToolsBanner />
-      <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+      <div className="grid lg:grid-cols-[220px_minmax(0,1fr)]">
+        <aside
+          className="flex flex-col gap-5 border-b bg-chrome px-3 py-4 lg:sticky lg:top-0 lg:h-[calc(100vh-var(--log-h))] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r"
+          style={{ "--log-h": `${logHeight}px` } as React.CSSProperties}
+        >
           <button
             type="button"
             onClick={() => setView("home")}
-            className="flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex items-center gap-2.5 rounded-md px-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Toolbox home"
           >
-            <img
-              src="/app/favicon.svg"
-              alt=""
-              className="size-8 shrink-0 rounded-[9px]"
-              width={32}
-              height={32}
-            />
-            <h1 className="text-base font-semibold leading-none">Toolbox</h1>
+            <ToolboxMark className="size-[26px] shrink-0" />
+            <span className="text-base font-semibold tracking-tight">Toolbox</span>
           </button>
-          <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-                apiOk === true && "bg-success/15 text-success-text",
-                apiOk === false && "bg-danger/15 text-danger-text",
-                apiOk === null && "bg-muted text-muted-foreground",
-              )}
-            >
-              {apiOk ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-              {apiOk === true ? "API connected" : apiOk === false ? "API offline" : "Checking…"}
-            </span>
-          </div>
-        </div>
-      </header>
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 lg:grid-cols-[220px_1fr]">
-        <aside className="space-y-6">
-          <button
-            type="button"
-            onClick={() => setView("home")}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium transition-colors",
-              view === "home"
-                ? "bg-primary text-primary-foreground"
-                : "text-foreground hover:bg-accent",
-            )}
-          >
-            <House className="h-4 w-4" />
-            Home
-          </button>
-          {mods.groups.map((group) => {
-            const muted = Boolean(groupStyle(group.name).muted);
-            return (
-              <nav key={group.name} className="space-y-1">
-                <p className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {group.name}
-                </p>
-                {group.mods.map((mod) => (
-                  <button
-                    key={mod.id}
-                    type="button"
-                    onClick={() => {
-                      setView("tools");
-                      setTool(mod.id);
-                    }}
-                    className={cn(
-                      "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-                      !muted && "font-medium",
-                      view === "tools" && tool === mod.id
-                        ? "bg-primary text-primary-foreground"
-                        : muted
-                          ? "text-muted-foreground hover:bg-accent hover:text-foreground"
-                          : "text-foreground hover:bg-accent",
-                    )}
-                  >
-                    {mod.name}
-                  </button>
-                ))}
-              </nav>
-            );
-          })}
-          <nav className="space-y-1 border-t border-border/60 pt-4">
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Settings
-            </p>
-            <button
-              type="button"
-              onClick={() => setView("logs")}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                view === "logs"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <ScrollText className="h-4 w-4" />
-              Logs
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("ai")}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                view === "ai"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <Bot className="h-4 w-4" />
-              AI
-            </button>
-            {desktop && (
-              <button
-                type="button"
-                onClick={() => setView("updates")}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                  view === "updates"
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                )}
-              >
-                <Download className="h-4 w-4" />
-                Updates
-                {updates.showUpdate && (
-                  <span
-                    className={cn(
-                      "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-                      view === "updates"
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-primary/15 text-primary",
-                    )}
-                  >
-                    New
-                  </span>
-                )}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setView("mods")}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                view === "mods"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <Puzzle className="h-4 w-4" />
-              Mods
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("appearance")}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors",
-                view === "appearance"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
-              )}
-            >
-              <Palette className="h-4 w-4" />
-              Appearance
-            </button>
+          <nav className="flex flex-col gap-0.5" aria-label="Tools">
+            <NavItem current={view === "home"} icon={House} onClick={() => setView("home")}>
+              Home
+            </NavItem>
+            {mods.groups.map((group) => {
+              const muted = Boolean(groupStyle(group.name).muted);
+              return (
+                <div key={group.name} className="mt-3.5 flex flex-col gap-0.5">
+                  <p className="px-2.5 pb-1 text-xs text-muted-foreground/80">{group.name}</p>
+                  {group.mods.map((mod) => (
+                    <NavItem
+                      key={mod.id}
+                      current={view === "tools" && tool === mod.id}
+                      icon={modIcon(mod.icon)}
+                      quiet={muted}
+                      onClick={() => {
+                        setView("tools");
+                        setTool(mod.id);
+                      }}
+                    >
+                      {mod.name}
+                    </NavItem>
+                  ))}
+                </div>
+              );
+            })}
           </nav>
+
+          <nav className="flex flex-col gap-0.5 border-t pt-4" aria-label="Settings">
+            <p className="px-2.5 pb-1 text-xs text-muted-foreground/80">Settings</p>
+            <NavItem current={view === "logs"} icon={ScrollText} onClick={() => setView("logs")}>
+              Logs
+            </NavItem>
+            <NavItem current={view === "ai"} icon={Bot} onClick={() => setView("ai")}>
+              AI
+            </NavItem>
+            {desktop && (
+              <NavItem
+                current={view === "updates"}
+                icon={Download}
+                onClick={() => setView("updates")}
+                badge={updates.showUpdate ? "New" : undefined}
+              >
+                Updates
+              </NavItem>
+            )}
+            <NavItem current={view === "mods"} icon={Puzzle} onClick={() => setView("mods")}>
+              Mods
+            </NavItem>
+            <NavItem current={view === "appearance"} icon={Palette} onClick={() => setView("appearance")}>
+              Appearance
+            </NavItem>
+          </nav>
+
+          <div className="mt-auto flex flex-col gap-2 px-2.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
+                  apiOk === true ? "bg-success" : apiOk === false ? "bg-danger" : "bg-muted-foreground/50",
+                )}
+              />
+              {apiLabel}
+            </span>
+            {currentVersion && (
+              <span className="font-mono text-[11px] text-muted-foreground/80">v{currentVersion}</span>
+            )}
+          </div>
         </aside>
 
-        <main>
-          {apiOk === false && (
-            <div className="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm">
-              Start the API server: <code className="rounded bg-muted px-1">python -m web</code>
-              {import.meta.env.DEV && (
-                <> — dev UI proxies <code className="rounded bg-muted px-1">/api</code> to port 8765</>
+        <div className="flex min-w-0 flex-col">
+          <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-chrome px-4 py-3.5 sm:px-7">
+            <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">{title}</h1>
+            <StatusPill tone={apiOk === true ? "ok" : apiOk === false ? "err" : "neutral"}>{apiLabel}</StatusPill>
+          </header>
+
+          <main className="flex-1 px-4 pb-10 pt-6 sm:px-7">
+            <div className="mx-auto max-w-5xl">
+              {apiOk === false && (
+                <div className="mb-5 rounded-lg bg-warning/10 px-3.5 py-2.5 text-[13px] text-warning-text">
+                  <strong className="font-semibold">The API server is not running:</strong> start it with{" "}
+                  <code className="rounded bg-muted px-1 font-mono text-foreground">python -m web</code>
+                  {import.meta.env.DEV && (
+                    <>
+                      {" "}
+                      – the dev UI proxies <code className="rounded bg-muted px-1 font-mono text-foreground">/api</code>{" "}
+                      to port 8765
+                    </>
+                  )}
+                </div>
+              )}
+              {view === "home" ? (
+                <HomePanel
+                  groups={mods.groups}
+                  desktop={desktop}
+                  updateAvailable={updates.showUpdate}
+                  jobs={jobs}
+                  undoing={undoing}
+                  onOpenTool={(id) => {
+                    setTool(id);
+                    setView("tools");
+                  }}
+                  onOpenSettings={setView}
+                  onUndoRename={(jobId) => void undoRename(jobId)}
+                />
+              ) : view === "logs" ? (
+                <LoggingPanel onFileLoggingChange={setFileLogging} />
+              ) : view === "ai" ? (
+                <div className="space-y-5">
+                  <AiSettingsPanel />
+                  <AiUsagePanel />
+                </div>
+              ) : view === "updates" ? (
+                <UpdatesPanel {...updates} />
+              ) : view === "appearance" ? (
+                <AppearancePanel
+                  appearance={appearance}
+                  themes={mods.themes}
+                  onOpenMods={() => setView("mods")}
+                />
+              ) : view === "mods" ? (
+                <ModsPanel mods={mods} />
+              ) : (
+                <ToolPanel
+                  tool={tool}
+                  mods={mods.enabledMods}
+                  onRun={handleRun}
+                  onQueueDownloads={handleQueueDownloads}
+                  running={running}
+                  activeJob={activeJob}
+                  downloadJobs={downloadJobs}
+                  onCancelDownload={cancel}
+                  onDismissFinishedDownloads={dismissFinishedDownloads}
+                  renamedRoot={renamedRoot}
+                  resultsJob={resultsJob}
+                />
               )}
             </div>
-          )}
-          {view === "home" ? (
-            <HomePanel
-              groups={mods.groups}
-              desktop={desktop}
-              updateAvailable={updates.showUpdate}
-              onOpenTool={(id) => {
-                setTool(id);
-                setView("tools");
-              }}
-              onOpenSettings={setView}
-            />
-          ) : view === "logs" ? (
-            <LoggingPanel onFileLoggingChange={setFileLogging} />
-          ) : view === "ai" ? (
-            <div className="space-y-6">
-              <AiSettingsPanel />
-              <AiUsagePanel />
-            </div>
-          ) : view === "updates" ? (
-            <UpdatesPanel {...updates} />
-          ) : view === "appearance" ? (
-            <AppearancePanel
-              appearance={appearance}
-              themes={mods.themes}
-              onOpenMods={() => setView("mods")}
-            />
-          ) : view === "mods" ? (
-            <ModsPanel mods={mods} />
-          ) : (
-            <ToolPanel
-              tool={tool}
-              mods={mods.enabledMods}
-              onRun={handleRun}
-              onQueueDownloads={handleQueueDownloads}
-              running={running}
-              activeJob={activeJob}
-              downloadJobs={downloadJobs}
-              onCancelDownload={cancel}
-              onDismissFinishedDownloads={dismissFinishedDownloads}
-              renamedRoot={renamedRoot}
-              resultsJob={resultsJob}
-            />
-          )}
-        </main>
+          </main>
+        </div>
       </div>
 
       {desktop && updates.showUpdate && updates.check?.latest_version && (

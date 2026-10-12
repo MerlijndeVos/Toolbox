@@ -43,46 +43,17 @@ export function groupStyle(group: string): GroupStyle {
   return GROUP_STYLES[group.trim().toLowerCase()] ?? FALLBACK;
 }
 
-// Full class strings so Tailwind can see them. Category accents come from theme tokens.
-export const ACCENT_STYLES: Record<Accent, { tile: string; chip: string }> = {
-  files: {
-    tile: "bg-category-files/15 hover:bg-category-files/25",
-    chip: "bg-category-files text-category-foreground",
-  },
-  media: {
-    tile: "bg-category-media/15 hover:bg-category-media/25",
-    chip: "bg-category-media text-category-foreground",
-  },
-  subtitles: {
-    tile: "bg-category-subtitles/15 hover:bg-category-subtitles/25",
-    chip: "bg-category-subtitles text-category-foreground",
-  },
-  experimental: {
-    tile: "bg-category-experimental/15 hover:bg-category-experimental/25",
-    chip: "bg-category-experimental text-category-foreground",
-  },
-  other: {
-    tile: "bg-category-other/15 hover:bg-category-other/25",
-    chip: "bg-category-other text-category-foreground",
-  },
-  settings: {
-    tile: "bg-category-settings/15 hover:bg-category-settings/25",
-    chip: "bg-category-settings text-category-foreground",
-  },
-  primary: {
-    tile: "bg-primary/15 hover:bg-primary/25",
-    chip: "bg-primary/20 text-primary",
-  },
-  success: {
-    tile: "bg-success/15 hover:bg-success/25",
-    chip: "bg-success/25 text-success-text",
-  },
-  warning: {
-    tile: "bg-warning/15 hover:bg-warning/25",
-    chip: "bg-warning/25 text-warning-text",
-  },
-  danger: {
-    tile: "bg-danger/15 hover:bg-danger/25",
-    chip: "bg-danger/20 text-danger-text",
-  },
+// Full class strings so Tailwind can see them. A category only tints its glyph: the default theme
+// sets every category accent to the text colour, so the interface stays neutral unless a theme asks.
+export const ACCENT_STYLES: Record<Accent, { chip: string }> = {
+  files: { chip: "bg-muted text-category-files" },
+  media: { chip: "bg-muted text-category-media" },
+  subtitles: { chip: "bg-muted text-category-subtitles" },
+  experimental: { chip: "bg-muted text-category-experimental" },
+  other: { chip: "bg-muted text-category-other" },
+  settings: { chip: "bg-muted text-category-settings" },
+  primary: { chip: "bg-muted text-primary" },
+  success: { chip: "bg-success/10 text-success-text" },
+  warning: { chip: "bg-warning/10 text-warning-text" },
+  danger: { chip: "bg-danger/10 text-danger-text" },
 };

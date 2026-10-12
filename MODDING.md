@@ -407,33 +407,34 @@ Every colour is a token, and this is the whole list. Values are `#rrggbb`, `hsl(
 
 | Token | Light | Dark | What it colours |
 | --- | --- | --- | --- |
-| `background` | `#f6f7f9` | `#0f121a` | Page background. |
-| `foreground` | `#151a28` | `#f2f5f7` | Normal text. |
-| `card` | `#ffffff` | `#151923` | Panels, the header and dialogs. |
-| `card-foreground` | `#151a28` | `#f2f5f7` | Text on panels. |
-| `primary` | `#2463eb` | `#3c83f6` | Main buttons and the selected menu item. |
-| `primary-foreground` | `#f8fafc` | `#0e121b` | Text on primary. |
-| `secondary` | `#e8eaed` | `#212530` | Secondary buttons. |
-| `secondary-foreground` | `#333a4c` | `#e0e6eb` | Text on secondary. |
-| `muted` | `#eeeff2` | `#212530` | Quiet backgrounds (chips, code, tabs). |
-| `muted-foreground` | `#606876` | `#8491a4` | Quiet text: hints and descriptions. |
-| `accent` | `#e8eaed` | `#262a36` | Hover background. |
-| `accent-foreground` | `#151a28` | `#f2f5f7` | Text on hover. |
-| `border` | `#dcdfe4` | `#2b2f3b` | Lines and outlines. |
-| `input` | `#dcdfe4` | `#2b2f3b` | Outline of text boxes. |
-| `ring` | `#2463eb` | `#3c83f6` | Keyboard focus ring. |
-| `destructive` | `#dc2828` | `#dc2828` | Buttons that delete or overwrite (Remove, Apply changes). Protected. |
+| `background` | `#f5f4f0` | `#121211` | Page background. |
+| `foreground` | `#1a1916` | `#ecebe6` | Normal text. |
+| `card` | `#ffffff` | `#1c1c1a` | Panels, the header and dialogs. |
+| `card-foreground` | `#1a1916` | `#ecebe6` | Text on panels. |
+| `chrome` | `#fbfaf7` | `#171716` | Sidebar, header, table heads and the log: one step apart from the page and the panels. |
+| `primary` | `#1a1916` | `#ecebe6` | Main buttons and the selected menu item. |
+| `primary-foreground` | `#ffffff` | `#141413` | Text on primary. |
+| `secondary` | `#efede8` | `#262523` | Secondary buttons. |
+| `secondary-foreground` | `#1a1916` | `#ecebe6` | Text on secondary. |
+| `muted` | `#efede8` | `#262523` | Quiet backgrounds (chips, code, tabs). |
+| `muted-foreground` | `#6b675e` | `#a19d93` | Quiet text: hints and descriptions. |
+| `accent` | `#efede8` | `#262523` | Hover background. |
+| `accent-foreground` | `#1a1916` | `#ecebe6` | Text on hover. |
+| `border` | `#e6e3dc` | `#2c2b28` | Lines and outlines. |
+| `input` | `#e6e3dc` | `#2c2b28` | Outline of text boxes. |
+| `ring` | `#0065b4` | `#70b3f7` | Keyboard focus ring. |
+| `destructive` | `#c53732` | `#c53732` | Buttons that delete or overwrite (Remove, Apply changes). Protected. |
 | `destructive-foreground` | `#ffffff` | `#ffffff` | Text on destructive buttons. Protected. |
-| `danger` | `#ef4343` | `#ef4343` | Errors and warnings about risk: fill, border and tint. Protected. |
-| `danger-text` | `#ba1c1c` | `#f87272` | Error text and icons. Protected. |
-| `warning` | `#f59f0a` | `#f59f0a` | Cautions: fill, border and tint. |
-| `warning-text` | `#864e0e` | `#fcd44f` | Caution text and icons. Protected. |
-| `success` | `#10b77f` | `#10b77f` | Good news: fill, border and tint. |
-| `success-text` | `#047756` | `#36d399` | Good-news text and icons. |
+| `danger` | `#c53732` | `#c53732` | Errors and warnings about risk: fill, border and tint. Protected. |
+| `danger-text` | `#c53732` | `#fb8276` | Error text and icons. Protected. |
+| `warning` | `#975800` | `#975800` | Cautions: fill, border and tint. |
+| `warning-text` | `#975800` | `#e6b55d` | Caution text and icons. Protected. |
+| `success` | `#0b7744` | `#0b7744` | Good news: fill, border and tint. |
+| `success-text` | `#0b7744` | `#6ac48c` | Good-news text and icons. |
 | `overlay` | `#000000` | `#000000` | The dim layer behind dialogs. |
-| `log-info` | `#606876` | `#8491a4` | Normal lines in the log panel. |
-| `log-warn` | `#b35309` | `#fbbd23` | Warning lines in the log panel. |
-| `log-error` | `#dc2828` | `#f87272` | Error lines in the log panel. |
+| `log-info` | `#6b675e` | `#a19d93` | Normal lines in the log panel. |
+| `log-warn` | `#975800` | `#e6b55d` | Warning lines in the log panel. |
+| `log-error` | `#c53732` | `#fb8276` | Error lines in the log panel. |
 | `syntax-keyword` | `#6b33cc` | `#b48ef6` | Keywords in code previews (def, import, if) and log level tags. |
 | `syntax-string` | `#117442` | `#69d390` | Strings in code, quoted text and URLs in logs. |
 | `syntax-number` | `#b34d09` | `#f6a655` | Numbers and constants (true, null) in code and logs. |
@@ -442,13 +443,13 @@ Every colour is a token, and this is the whole list. Values are `#rrggbb`, `hsl(
 | `syntax-type` | `#0a6c7b` | `#59cfcf` | Class names, types and built-ins; exception names in logs. |
 | `syntax-property` | `#bf2256` | `#f28899` | Keys and attributes (TOML, JSON, YAML, HTML). |
 | `syntax-meta` | `#97560c` | `#f0c74c` | Decorators, headings and section names ([table] in TOML). |
-| `category-files` | `#e21d4b` | `#f43e5c` | Accent of the Files section. |
-| `category-media` | `#2463eb` | `#3c83f6` | Accent of the Media section. |
-| `category-subtitles` | `#7c3bed` | `#895af6` | Accent of the Subtitles section. |
-| `category-experimental` | `#db7706` | `#db7706` | Accent of the Experimental section. |
-| `category-other` | `#059467` | `#059467` | Accent of the Other section and new categories. |
-| `category-settings` | `#48566a` | `#65758b` | Accent of the Settings tiles. |
-| `category-foreground` | `#ffffff` | `#ffffff` | Icon colour on the accent chips. |
+| `category-files` | `#1a1916` | `#ecebe6` | Accent of the Files section. |
+| `category-media` | `#1a1916` | `#ecebe6` | Accent of the Media section. |
+| `category-subtitles` | `#1a1916` | `#ecebe6` | Accent of the Subtitles section. |
+| `category-experimental` | `#6b675e` | `#a19d93` | Accent of the Experimental section. |
+| `category-other` | `#1a1916` | `#ecebe6` | Accent of the Other section and new categories. |
+| `category-settings` | `#6b675e` | `#a19d93` | Accent of the Settings tiles. |
+| `category-foreground` | `#ffffff` | `#141413` | Icon colour on the accent chips. |
 
 `[theme.groups]` is shorthand: `files = "#..."` sets `category-files` for light and dark. If
 `[theme.light]` or `[theme.dark]` names the token itself, that wins for its mode.
@@ -669,33 +670,34 @@ One code block labelled `mod.toml`, and a short sentence or two about the look. 
 - `destructive`, `danger` and `danger-text` must stay red or orange (hue 335-360 or 0-45,
   clearly saturated), so a delete button and a warning always look like a warning.
 - Tokens (with the default light and dark colour):
-- background: Page background. (default light #f6f7f9, dark #0f121a)
-- foreground: Normal text. (default light #151a28, dark #f2f5f7)
-- card: Panels, the header and dialogs. (default light #ffffff, dark #151923)
-- card-foreground: Text on panels. (default light #151a28, dark #f2f5f7)
-- primary: Main buttons and the selected menu item. (default light #2463eb, dark #3c83f6)
-- primary-foreground: Text on primary. (default light #f8fafc, dark #0e121b)
-- secondary: Secondary buttons. (default light #e8eaed, dark #212530)
-- secondary-foreground: Text on secondary. (default light #333a4c, dark #e0e6eb)
-- muted: Quiet backgrounds (chips, code, tabs). (default light #eeeff2, dark #212530)
-- muted-foreground: Quiet text: hints and descriptions. (default light #606876, dark #8491a4)
-- accent: Hover background. (default light #e8eaed, dark #262a36)
-- accent-foreground: Text on hover. (default light #151a28, dark #f2f5f7)
-- border: Lines and outlines. (default light #dcdfe4, dark #2b2f3b)
-- input: Outline of text boxes. (default light #dcdfe4, dark #2b2f3b)
-- ring: Keyboard focus ring. (default light #2463eb, dark #3c83f6)
-- destructive: Buttons that delete or overwrite (Remove, Apply changes). Protected. (default light #dc2828, dark #dc2828)
+- background: Page background. (default light #f5f4f0, dark #121211)
+- foreground: Normal text. (default light #1a1916, dark #ecebe6)
+- card: Panels, the header and dialogs. (default light #ffffff, dark #1c1c1a)
+- card-foreground: Text on panels. (default light #1a1916, dark #ecebe6)
+- chrome: Sidebar, header, table heads and the log: one step apart from the page and the panels. (default light #fbfaf7, dark #171716)
+- primary: Main buttons and the selected menu item. (default light #1a1916, dark #ecebe6)
+- primary-foreground: Text on primary. (default light #ffffff, dark #141413)
+- secondary: Secondary buttons. (default light #efede8, dark #262523)
+- secondary-foreground: Text on secondary. (default light #1a1916, dark #ecebe6)
+- muted: Quiet backgrounds (chips, code, tabs). (default light #efede8, dark #262523)
+- muted-foreground: Quiet text: hints and descriptions. (default light #6b675e, dark #a19d93)
+- accent: Hover background. (default light #efede8, dark #262523)
+- accent-foreground: Text on hover. (default light #1a1916, dark #ecebe6)
+- border: Lines and outlines. (default light #e6e3dc, dark #2c2b28)
+- input: Outline of text boxes. (default light #e6e3dc, dark #2c2b28)
+- ring: Keyboard focus ring. (default light #0065b4, dark #70b3f7)
+- destructive: Buttons that delete or overwrite (Remove, Apply changes). Protected. (default light #c53732, dark #c53732)
 - destructive-foreground: Text on destructive buttons. Protected. (default light #ffffff, dark #ffffff)
-- danger: Errors and warnings about risk: fill, border and tint. Protected. (default light #ef4343, dark #ef4343)
-- danger-text: Error text and icons. Protected. (default light #ba1c1c, dark #f87272)
-- warning: Cautions: fill, border and tint. (default light #f59f0a, dark #f59f0a)
-- warning-text: Caution text and icons. Protected. (default light #864e0e, dark #fcd44f)
-- success: Good news: fill, border and tint. (default light #10b77f, dark #10b77f)
-- success-text: Good-news text and icons. (default light #047756, dark #36d399)
+- danger: Errors and warnings about risk: fill, border and tint. Protected. (default light #c53732, dark #c53732)
+- danger-text: Error text and icons. Protected. (default light #c53732, dark #fb8276)
+- warning: Cautions: fill, border and tint. (default light #975800, dark #975800)
+- warning-text: Caution text and icons. Protected. (default light #975800, dark #e6b55d)
+- success: Good news: fill, border and tint. (default light #0b7744, dark #0b7744)
+- success-text: Good-news text and icons. (default light #0b7744, dark #6ac48c)
 - overlay: The dim layer behind dialogs. (default light #000000, dark #000000)
-- log-info: Normal lines in the log panel. (default light #606876, dark #8491a4)
-- log-warn: Warning lines in the log panel. (default light #b35309, dark #fbbd23)
-- log-error: Error lines in the log panel. (default light #dc2828, dark #f87272)
+- log-info: Normal lines in the log panel. (default light #6b675e, dark #a19d93)
+- log-warn: Warning lines in the log panel. (default light #975800, dark #e6b55d)
+- log-error: Error lines in the log panel. (default light #c53732, dark #fb8276)
 - syntax-keyword: Keywords in code previews (def, import, if) and log level tags. (default light #6b33cc, dark #b48ef6)
 - syntax-string: Strings in code, quoted text and URLs in logs. (default light #117442, dark #69d390)
 - syntax-number: Numbers and constants (true, null) in code and logs. (default light #b34d09, dark #f6a655)
@@ -704,13 +706,13 @@ One code block labelled `mod.toml`, and a short sentence or two about the look. 
 - syntax-type: Class names, types and built-ins; exception names in logs. (default light #0a6c7b, dark #59cfcf)
 - syntax-property: Keys and attributes (TOML, JSON, YAML, HTML). (default light #bf2256, dark #f28899)
 - syntax-meta: Decorators, headings and section names ([table] in TOML). (default light #97560c, dark #f0c74c)
-- category-files: Accent of the Files section. (default light #e21d4b, dark #f43e5c)
-- category-media: Accent of the Media section. (default light #2463eb, dark #3c83f6)
-- category-subtitles: Accent of the Subtitles section. (default light #7c3bed, dark #895af6)
-- category-experimental: Accent of the Experimental section. (default light #db7706, dark #db7706)
-- category-other: Accent of the Other section and new categories. (default light #059467, dark #059467)
-- category-settings: Accent of the Settings tiles. (default light #48566a, dark #65758b)
-- category-foreground: Icon colour on the accent chips. (default light #ffffff, dark #ffffff)
+- category-files: Accent of the Files section. (default light #1a1916, dark #ecebe6)
+- category-media: Accent of the Media section. (default light #1a1916, dark #ecebe6)
+- category-subtitles: Accent of the Subtitles section. (default light #1a1916, dark #ecebe6)
+- category-experimental: Accent of the Experimental section. (default light #6b675e, dark #a19d93)
+- category-other: Accent of the Other section and new categories. (default light #1a1916, dark #ecebe6)
+- category-settings: Accent of the Settings tiles. (default light #6b675e, dark #a19d93)
+- category-foreground: Icon colour on the accent chips. (default light #ffffff, dark #141413)
 
 ## How to answer
 First, in 1-2 sentences, describe the look you are making and any assumptions. Then give the

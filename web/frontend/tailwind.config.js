@@ -10,6 +10,7 @@ export default {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        chrome: "hsl(var(--chrome))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -74,6 +75,7 @@ export default {
       },
       fontFamily: {
         sans: "var(--font-sans)",
+        mono: ["\"Geist Mono\"", "ui-monospace", "\"Cascadia Mono\"", "Menlo", "monospace"],
       },
       borderRadius: {
         lg: "var(--radius)",

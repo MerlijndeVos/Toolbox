@@ -2,37 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Geist and Geist Mono, from the Conductor design system. Variable fonts, so one file per family. */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   /* The default theme. Keep in step with core/mods/theme.py (a test compares them); a theme mod
      overrides these at runtime, see lib/theme.ts. */
   :root {
-    --background: 220 20% 97%;
-    --foreground: 224 30% 12%;
+    --background: 48 20% 95.1%;
+    --foreground: 45 8.3% 9.4%;
     --card: 0 0% 100%;
-    --card-foreground: 224 30% 12%;
-    --primary: 221 83% 53%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 220 14% 92%;
-    --secondary-foreground: 224 20% 25%;
-    --muted: 220 14% 94%;
-    --muted-foreground: 220 10% 42%;
-    --accent: 220 14% 92%;
-    --accent-foreground: 224 30% 12%;
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 221 83% 53%;
-    --destructive: 0 72% 51%;
+    --card-foreground: 45 8.3% 9.4%;
+    --chrome: 45 33.3% 97.6%;
+    --primary: 45 8.3% 9.4%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 42.9 17.9% 92.4%;
+    --secondary-foreground: 45 8.3% 9.4%;
+    --muted: 42.9 17.9% 92.4%;
+    --muted-foreground: 41.5 6.5% 39.4%;
+    --accent: 42.9 17.9% 92.4%;
+    --accent-foreground: 45 8.3% 9.4%;
+    --border: 42 16.7% 88.2%;
+    --input: 42 16.7% 88.2%;
+    --ring: 206.4 100% 35.3%;
+    --destructive: 2.1 59.8% 48.3%;
     --destructive-foreground: 0 0% 100%;
-    --danger: 0 84% 60%;
-    --danger-text: 0 74% 42%;
-    --warning: 38 92% 50%;
-    --warning-text: 32 81% 29%;
-    --success: 160 84% 39%;
-    --success-text: 163 94% 24%;
+    --danger: 2.1 59.8% 48.3%;
+    --danger-text: 2.1 59.8% 48.3%;
+    --warning: 34.8 100% 29.6%;
+    --warning-text: 34.8 100% 29.6%;
+    --success: 151.4 82.6% 25.5%;
+    --success-text: 151.4 82.6% 25.5%;
     --overlay: 0 0% 0%;
-    --log-info: 220 10% 42%;
-    --log-warn: 26 90% 37%;
-    --log-error: 0 72% 51%;
+    --log-info: 41.5 6.5% 39.4%;
+    --log-warn: 34.8 100% 29.6%;
+    --log-error: 2.1 59.8% 48.3%;
     --syntax-keyword: 262 60% 50%;
     --syntax-string: 150 75% 26%;
     --syntax-number: 24 90% 37%;
@@ -41,45 +58,46 @@
     --syntax-type: 188 85% 26%;
     --syntax-property: 340 70% 44%;
     --syntax-meta: 32 85% 32%;
-    --category-files: 346 77% 50%;
-    --category-media: 221 83% 53%;
-    --category-subtitles: 262 83% 58%;
-    --category-experimental: 32 95% 44%;
-    --category-other: 161 94% 30%;
-    --category-settings: 215 19% 35%;
+    --category-files: 45 8.3% 9.4%;
+    --category-media: 45 8.3% 9.4%;
+    --category-subtitles: 45 8.3% 9.4%;
+    --category-experimental: 41.5 6.5% 39.4%;
+    --category-other: 45 8.3% 9.4%;
+    --category-settings: 41.5 6.5% 39.4%;
     --category-foreground: 0 0% 100%;
     --radius: 0.625rem;
-    --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
 
   .dark {
-    --background: 224 28% 8%;
-    --foreground: 210 25% 96%;
-    --card: 224 24% 11%;
-    --card-foreground: 210 25% 96%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 224 30% 8%;
-    --secondary: 224 18% 16%;
-    --secondary-foreground: 210 20% 90%;
-    --muted: 224 18% 16%;
-    --muted-foreground: 215 15% 58%;
-    --accent: 224 18% 18%;
-    --accent-foreground: 210 25% 96%;
-    --border: 224 16% 20%;
-    --input: 224 16% 20%;
-    --ring: 217 91% 60%;
-    --destructive: 0 72% 51%;
+    --background: 60 2.9% 6.9%;
+    --foreground: 50 13.6% 91.4%;
+    --card: 60 3.7% 10.6%;
+    --card-foreground: 50 13.6% 91.4%;
+    --chrome: 60 2.2% 8.8%;
+    --primary: 50 13.6% 91.4%;
+    --primary-foreground: 60 2.6% 7.6%;
+    --secondary: 40 4.1% 14.3%;
+    --secondary-foreground: 50 13.6% 91.4%;
+    --muted: 40 4.1% 14.3%;
+    --muted-foreground: 42.9 6.9% 60.4%;
+    --accent: 40 4.1% 14.3%;
+    --accent-foreground: 50 13.6% 91.4%;
+    --border: 45 4.8% 16.5%;
+    --input: 45 4.8% 16.5%;
+    --ring: 210.2 89.3% 70.4%;
+    --destructive: 2.1 59.8% 48.3%;
     --destructive-foreground: 0 0% 100%;
-    --danger: 0 84% 60%;
-    --danger-text: 0 91% 71%;
-    --warning: 38 92% 50%;
-    --warning-text: 46 97% 65%;
-    --success: 160 84% 39%;
-    --success-text: 158 64% 52%;
+    --danger: 2.1 59.8% 48.3%;
+    --danger-text: 5.3 94.5% 72.4%;
+    --warning: 34.8 100% 29.6%;
+    --warning-text: 38.4 73.4% 63.4%;
+    --success: 151.4 82.6% 25.5%;
+    --success-text: 142.8 43.6% 59.2%;
     --overlay: 0 0% 0%;
-    --log-info: 215 15% 58%;
-    --log-warn: 43 96% 56%;
-    --log-error: 0 91% 71%;
+    --log-info: 42.9 6.9% 60.4%;
+    --log-warn: 38.4 73.4% 63.4%;
+    --log-error: 5.3 94.5% 72.4%;
     --syntax-keyword: 262 85% 76%;
     --syntax-string: 142 55% 62%;
     --syntax-number: 30 90% 65%;
@@ -88,13 +106,13 @@
     --syntax-type: 180 55% 58%;
     --syntax-property: 350 80% 74%;
     --syntax-meta: 45 85% 62%;
-    --category-files: 350 89% 60%;
-    --category-media: 217 91% 60%;
-    --category-subtitles: 258 90% 66%;
-    --category-experimental: 32 95% 44%;
-    --category-other: 161 94% 30%;
-    --category-settings: 215 16% 47%;
-    --category-foreground: 0 0% 100%;
+    --category-files: 50 13.6% 91.4%;
+    --category-media: 50 13.6% 91.4%;
+    --category-subtitles: 50 13.6% 91.4%;
+    --category-experimental: 42.9 6.9% 60.4%;
+    --category-other: 50 13.6% 91.4%;
+    --category-settings: 42.9 6.9% 60.4%;
+    --category-foreground: 60 2.6% 7.6%;
   }
 }
 

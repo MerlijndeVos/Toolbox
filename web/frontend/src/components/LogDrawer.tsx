@@ -138,7 +138,7 @@ export function LogDrawer({
   return (
     <div
       className={cn(
-        "fixed bottom-0 left-0 right-0 z-40 border-t bg-card shadow-lg",
+        "fixed bottom-0 left-0 right-0 z-40 border-t bg-chrome",
         !open && "h-11 transition-all",
       )}
       style={open ? { height } : undefined}
@@ -168,7 +168,7 @@ export function LogDrawer({
             variant="ghost"
             size="sm"
             onClick={onToggleWrap}
-            className={cn(wrap && "text-primary")}
+            className={cn(wrap && "bg-accent")}
             aria-pressed={wrap}
             title={wrap ? "Disable line wrap" : "Enable line wrap"}
           >
@@ -179,7 +179,7 @@ export function LogDrawer({
             variant="ghost"
             size="sm"
             onClick={() => updateStick(!stick)}
-            className={cn(stick && "text-primary")}
+            className={cn(stick && "bg-accent")}
             aria-pressed={stick}
             aria-label="Stick to bottom"
             title={stick ? "Stuck to the bottom: new lines stay in view (click to stop)" : "Stick to the bottom so new lines stay in view"}

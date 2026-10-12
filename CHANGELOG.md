@@ -5,6 +5,15 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+### Changed
+- The interface follows the Conductor design system: warm paper neutrals, an ink primary button, flat panels with a ruled header, Geist and Geist Mono, and colour only where it means a state or money.
+- A fixed sidebar and a top bar with the page title replace the old header. Home lists each category as a panel of tools and shows your recent runs with an Undo rename button.
+- The default theme palette, font stack and category accents are neutral; installed themes keep working.
+
+### Added
+- A `chrome` theme token for the sidebar, header and log, one step apart from the page and the panels.
+- Geist and Geist Mono ship with the app.
+
 ## [3.4.0] - 2026-10-11
 
 ### Added
