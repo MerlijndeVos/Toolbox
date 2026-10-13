@@ -5,6 +5,8 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-10-13
+
 ### Changed
 - Releases are cut from the `production` branch: the release workflow refuses a version tag or manual run whose commit is not on it.
 - The interface follows the Conductor design system: warm paper neutrals, an ink primary button, flat panels with a ruled header, Geist and Geist Mono, and colour only where it means a state or money.
