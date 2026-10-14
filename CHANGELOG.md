@@ -5,6 +5,8 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+## [3.6.0] - 2026-10-14
+
 ### Fixed
 - On Windows the app no longer waits 30 seconds and fails when another program already listens on the port; it now picks a free port.
 
