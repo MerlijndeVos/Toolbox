@@ -5,6 +5,9 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+### Changed
+- The blue theme is back in dark mode (blue-tinted surfaces and a blue primary). Light mode keeps the Conductor paper neutrals with blue highlights: primary button, focus ring and section accents.
+
 ## [3.5.0] - 2026-10-13
 
 ### Changed

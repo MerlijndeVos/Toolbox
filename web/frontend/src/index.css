@@ -27,8 +27,8 @@
     --card: 0 0% 100%;
     --card-foreground: 45 8.3% 9.4%;
     --chrome: 45 33.3% 97.6%;
-    --primary: 45 8.3% 9.4%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 210 40% 98%;
     --secondary: 42.9 17.9% 92.4%;
     --secondary-foreground: 45 8.3% 9.4%;
     --muted: 42.9 17.9% 92.4%;
@@ -37,7 +37,7 @@
     --accent-foreground: 45 8.3% 9.4%;
     --border: 42 16.7% 88.2%;
     --input: 42 16.7% 88.2%;
-    --ring: 206.4 100% 35.3%;
+    --ring: 221 83% 53%;
     --destructive: 2.1 59.8% 48.3%;
     --destructive-foreground: 0 0% 100%;
     --danger: 2.1 59.8% 48.3%;
@@ -58,11 +58,11 @@
     --syntax-type: 188 85% 26%;
     --syntax-property: 340 70% 44%;
     --syntax-meta: 32 85% 32%;
-    --category-files: 45 8.3% 9.4%;
-    --category-media: 45 8.3% 9.4%;
-    --category-subtitles: 45 8.3% 9.4%;
+    --category-files: 221 83% 53%;
+    --category-media: 221 83% 53%;
+    --category-subtitles: 221 83% 53%;
     --category-experimental: 41.5 6.5% 39.4%;
-    --category-other: 45 8.3% 9.4%;
+    --category-other: 221 83% 53%;
     --category-settings: 41.5 6.5% 39.4%;
     --category-foreground: 0 0% 100%;
     --radius: 0.625rem;
@@ -70,22 +70,22 @@
   }
 
   .dark {
-    --background: 60 2.9% 6.9%;
-    --foreground: 50 13.6% 91.4%;
-    --card: 60 3.7% 10.6%;
-    --card-foreground: 50 13.6% 91.4%;
-    --chrome: 60 2.2% 8.8%;
-    --primary: 50 13.6% 91.4%;
-    --primary-foreground: 60 2.6% 7.6%;
-    --secondary: 40 4.1% 14.3%;
-    --secondary-foreground: 50 13.6% 91.4%;
-    --muted: 40 4.1% 14.3%;
-    --muted-foreground: 42.9 6.9% 60.4%;
-    --accent: 40 4.1% 14.3%;
-    --accent-foreground: 50 13.6% 91.4%;
-    --border: 45 4.8% 16.5%;
-    --input: 45 4.8% 16.5%;
-    --ring: 210.2 89.3% 70.4%;
+    --background: 224 28% 8%;
+    --foreground: 210 25% 96%;
+    --card: 224 24% 11%;
+    --card-foreground: 210 25% 96%;
+    --chrome: 224 26% 9.5%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 224 30% 8%;
+    --secondary: 224 18% 16%;
+    --secondary-foreground: 210 20% 90%;
+    --muted: 224 18% 16%;
+    --muted-foreground: 215 15% 58%;
+    --accent: 224 18% 18%;
+    --accent-foreground: 210 25% 96%;
+    --border: 224 16% 20%;
+    --input: 224 16% 20%;
+    --ring: 217 91% 60%;
     --destructive: 2.1 59.8% 48.3%;
     --destructive-foreground: 0 0% 100%;
     --danger: 2.1 59.8% 48.3%;
@@ -95,7 +95,7 @@
     --success: 151.4 82.6% 25.5%;
     --success-text: 142.8 43.6% 59.2%;
     --overlay: 0 0% 0%;
-    --log-info: 42.9 6.9% 60.4%;
+    --log-info: 215 15% 58%;
     --log-warn: 38.4 73.4% 63.4%;
     --log-error: 5.3 94.5% 72.4%;
     --syntax-keyword: 262 85% 76%;
@@ -106,13 +106,13 @@
     --syntax-type: 180 55% 58%;
     --syntax-property: 350 80% 74%;
     --syntax-meta: 45 85% 62%;
-    --category-files: 50 13.6% 91.4%;
-    --category-media: 50 13.6% 91.4%;
-    --category-subtitles: 50 13.6% 91.4%;
-    --category-experimental: 42.9 6.9% 60.4%;
-    --category-other: 50 13.6% 91.4%;
-    --category-settings: 42.9 6.9% 60.4%;
-    --category-foreground: 60 2.6% 7.6%;
+    --category-files: 217 91% 60%;
+    --category-media: 217 91% 60%;
+    --category-subtitles: 217 91% 60%;
+    --category-experimental: 215 15% 58%;
+    --category-other: 217 91% 60%;
+    --category-settings: 215 15% 58%;
+    --category-foreground: 224 30% 8%;
   }
 }
 
