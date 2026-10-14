@@ -5,6 +5,9 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+### Fixed
+- On Windows the app no longer waits 30 seconds and fails when another program already listens on the port; it now picks a free port.
+
 ### Changed
 - The blue theme is back in dark mode (blue-tinted surfaces and a blue primary). Light mode keeps the Conductor paper neutrals with blue highlights: primary button, focus ring and section accents. The mod market page uses the same palette.
 

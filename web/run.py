@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -11,7 +12,12 @@ import urllib.request
 def port_available(port: int, host: str = "127.0.0.1") -> bool:
     """Return whether *port* can be bound on *host*."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if sys.platform == "win32":
+            # SO_REUSEADDR on Windows lets a bind succeed on top of a live listener, so a stray
+            # server would look like a free port. Ask for exclusive use instead.
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        else:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             sock.bind((host, port))
             return True
