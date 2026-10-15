@@ -206,7 +206,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="$(python -c "from core.version import read_pyproject_version; print(read_pyproject_version())")"
+          # Read pyproject.toml directly: importing core needs the app's dependencies, which this job lacks.
+          VERSION="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
           BUILD="${VERSION}-exp.${GITHUB_SHA::7}"
           {
             echo "build: ${BUILD}"
