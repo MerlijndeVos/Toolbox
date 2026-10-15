@@ -36,6 +36,11 @@ const TERMINAL: JobStatus[] = ["completed", "failed", "cancelled"];
 
 const BITRATE_OPTIONS = ["192", "256", "320"].map((v) => ({ value: v, label: `${v} kbps` }));
 
+const FORMATS = [
+  { value: "mp4", label: "MP4 video", hint: "Keeps video and audio" },
+  { value: "mp3", label: "MP3 audio", hint: "Extracts audio only" },
+];
+
 interface PendingEntry {
   id: string;
   title: string;
@@ -72,9 +77,13 @@ function TorrentTableHeader() {
 
 function DownloadRow({
   job,
+  selected,
+  onToggle,
   onCancel,
 }: {
   job: ActiveJob;
+  selected: boolean;
+  onToggle: (id: string, selected: boolean) => void;
   onCancel: (id: string) => void;
 }) {
   const active = job.status === "queued" || job.status === "running";
@@ -97,6 +106,13 @@ function DownloadRow({
   return (
     <div className="grid grid-cols-[minmax(0,2fr)_3.5rem_minmax(0,1fr)_3.5rem_3rem_2rem] items-center gap-2 border-b px-3 py-2.5 text-sm last:border-b-0">
       <div className="flex min-w-0 items-center gap-2.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={(e) => onToggle(job.id, e.target.checked)}
+          className="h-4 w-4 shrink-0 rounded border-input"
+          aria-label={`Select ${name}`}
+        />
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
           <StatusIcon status={job.status} />
         </div>
@@ -174,6 +190,7 @@ export function DownloadPanel({
   const [pendingEntries, setPendingEntries] = useState<PendingEntry[]>([]);
   const [queueing, setQueueing] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set());
 
   const activeCount = useMemo(
     () => jobs.filter((j) => j.status === "queued" || j.status === "running").length,
@@ -188,6 +205,25 @@ export function DownloadPanel({
       1,
     );
   }, [probeResult, pendingEntries]);
+
+  const selectedJobIds = jobs.filter((j) => selectedJobs.has(j.id)).map((j) => j.id);
+  const allJobsSelected = jobs.length > 0 && selectedJobIds.length === jobs.length;
+  const selectedActiveJobs = jobs.filter(
+    (j) => selectedJobs.has(j.id) && (j.status === "queued" || j.status === "running"),
+  );
+
+  const toggleJob = (id: string, selected: boolean) => {
+    setSelectedJobs((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleAllJobs = () => {
+    setSelectedJobs(allJobsSelected ? new Set() : new Set(jobs.map((j) => j.id)));
+  };
 
   const selectedCount = pendingEntries.filter((e) => e.selected).length;
   const canProbe = Boolean(url.trim()) && !probing;
@@ -339,29 +375,40 @@ export function DownloadPanel({
           )}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SelectField
-            label="Format"
-            value={format}
-            onChange={setFormat}
-            tooltip="MP4 keeps video and audio; MP3 extracts audio only."
-            options={[
-              { value: "mp4", label: "MP4 video" },
-              { value: "mp3", label: "MP3 audio" },
-            ]}
-          />
+        <div
+          role="tablist"
+          aria-label="Download format"
+          className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+        >
+          {FORMATS.map((f) => (
+            <button
+              key={f.value}
+              type="button"
+              role="tab"
+              aria-selected={format === f.value}
+              onClick={() => setFormat(f.value)}
+              className={cn(
+                "rounded-md px-3 py-2 text-left transition-colors",
+                format === f.value ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <span className="block text-sm font-medium">{f.label}</span>
+              <span className="block text-xs text-muted-foreground">{f.hint}</span>
+            </button>
+          ))}
+        </div>
+        {format === "mp4" && (
           <SelectField
             label="Max quality"
             value={quality}
             onChange={setQuality}
-            disabled={format === "mp3"}
-            tooltip="Maximum video height. Best picks the highest available. Not applicable to MP3."
+            tooltip="Maximum video height. Best picks the highest available."
             options={["best", "2160", "1440", "1080", "720", "480", "360"].map((v) => ({
               value: v,
               label: v === "best" ? "Best" : `${v}p`,
             }))}
           />
-        </div>
+        )}
         {format === "mp3" && (
           <SelectField
             label="Audio bitrate (kbps)"
@@ -506,6 +553,32 @@ export function DownloadPanel({
                 </span>
               )}
             </p>
+            <div className="flex items-center gap-1">
+            {jobs.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={toggleAllJobs}
+              >
+                {allJobsSelected ? "Unselect all" : "Select all"}
+              </Button>
+            )}
+            {selectedActiveJobs.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs hover:text-destructive"
+                onClick={() => {
+                  selectedActiveJobs.forEach((j) => onCancel(j.id));
+                  setSelectedJobs(new Set());
+                }}
+              >
+                Cancel selected ({selectedActiveJobs.length})
+              </Button>
+            )}
             {finishedCount > 0 && (
               <Button
                 type="button"
@@ -517,6 +590,7 @@ export function DownloadPanel({
                 Clear finished
               </Button>
             )}
+            </div>
           </div>
           {jobs.length === 0 ? (
             <p className="px-3 py-10 text-center text-sm text-muted-foreground">
@@ -526,7 +600,13 @@ export function DownloadPanel({
             <div className="max-h-[min(420px,50vh)] overflow-y-auto overflow-x-hidden">
               <TorrentTableHeader />
               {jobs.map((job) => (
-                <DownloadRow key={job.id} job={job} onCancel={onCancel} />
+                <DownloadRow
+                  key={job.id}
+                  job={job}
+                  selected={selectedJobs.has(job.id)}
+                  onToggle={toggleJob}
+                  onCancel={onCancel}
+                />
               ))}
             </div>
           )}

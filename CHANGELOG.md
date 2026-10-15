@@ -5,6 +5,12 @@ Per-release write-ups live in `release-notes/`.
 
 ## [Unreleased]
 
+### Added
+- The download queue has a Select all / Unselect all button, per-row checkboxes and a Cancel selected action.
+
+### Changed
+- The download page picks MP4 or MP3 with the same switch as the rename modes.
+
 ## [3.6.0] - 2026-10-14
 
 ### Fixed
