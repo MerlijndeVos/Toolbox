@@ -74,6 +74,8 @@ export interface UpdateCheck {
   release_notes?: string | null;
   error?: string | null;
   status_message?: string | null;
+  /** The offered build is an experimental one, not an official release. */
+  experimental?: boolean;
 }
 
 export interface UpdateApplyStatus {
@@ -302,6 +304,8 @@ export interface AppSettings {
   syntax_code: boolean;
   syntax_logs: boolean;
   syntax_scheme: SyntaxScheme;
+  /** Offer experimental builds (the latest production commit) as updates. */
+  experimental_updates: boolean;
 }
 
 /** Omitted fields are kept; an empty string clears the field. */
@@ -322,6 +326,7 @@ export function updateSettings(patch: {
   syntax_code?: boolean;
   syntax_logs?: boolean;
   syntax_scheme?: SyntaxScheme;
+  experimental_updates?: boolean;
   ai?: {
     provider?: AiProviderId;
     providers?: Partial<Record<AiProviderId, AiProviderUpdate>>;

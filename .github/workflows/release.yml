@@ -1,10 +1,18 @@
 name: Release
 
+# Tags build an official release. Every push to production (or a manual run on it) builds the
+# same installers and refreshes the rolling "experimental" pre-release instead.
 on:
   push:
     tags:
       - "v*"
+    branches:
+      - production
   workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/production' }}
 
 permissions:
   contents: write
@@ -80,6 +88,13 @@ jobs:
             echo "Missing $NOTES — add release notes before tagging."
             exit 1
           fi
+
+      - name: Label experimental builds
+        if: github.ref == 'refs/heads/production'
+        shell: bash
+        run: |
+          VERSION="$(python -c "from core.version import read_pyproject_version; print(read_pyproject_version())")"
+          echo "TOOLBOX_BUNDLED_VERSION=${VERSION}-exp.${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
       - name: Sync frontend package version
         shell: bash
@@ -167,3 +182,37 @@ jobs:
           files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  experimental:
+    name: Publish experimental pre-release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/production'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: toolbox-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Replace the experimental pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(python -c "from core.version import read_pyproject_version; print(read_pyproject_version())")"
+          BUILD="${VERSION}-exp.${GITHUB_SHA::7}"
+          {
+            echo "build: ${BUILD}"
+            echo
+            echo "Experimental build of the production branch at ${GITHUB_SHA}. This is not an official release."
+            echo "Turn on Experimental builds under Updates to receive it."
+          } > notes.md
+          gh release delete experimental --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" || true
+          gh release create experimental artifacts/*             --repo "$GITHUB_REPOSITORY"             --target "$GITHUB_SHA"             --prerelease             --title "Experimental ${BUILD}"             --notes-file notes.md

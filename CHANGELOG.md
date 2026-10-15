@@ -6,6 +6,7 @@ Per-release write-ups live in `release-notes/`.
 ## [Unreleased]
 
 ### Added
+- Experimental builds: turn on "Experimental builds" under Updates to get the latest production commit before it is released. Every push to `production` refreshes a rolling `experimental` pre-release with the same installers; the version shows as `X.Y.Z-exp.<sha>`, and a newer official release always replaces it.
 - The download queue has a Select all / Unselect all button, per-row checkboxes and a Cancel selected action.
 
 ### Changed

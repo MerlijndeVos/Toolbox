@@ -1,4 +1,7 @@
-import { Download, Loader2, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Download, FlaskConical, Loader2, RefreshCw } from "lucide-react";
+import { fetchSettings, updateSettings } from "@/api/client";
+import { CheckField } from "@/components/fields";
 import { UpdateProgress } from "@/components/UpdateProgress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +19,28 @@ export function UpdatesPanel({
   runCheck,
   setModalOpen,
 }: UpdatesState) {
-  const error = networkError ?? check?.error ?? applyError;
+  const [experimental, setExperimental] = useState(false);
+  const [settingError, setSettingError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchSettings()
+      .then((s) => setExperimental(s.experimental_updates))
+      .catch(() => {});
+  }, []);
+
+  const toggleExperimental = async (value: boolean) => {
+    setSettingError(null);
+    setExperimental(value);
+    try {
+      await updateSettings({ experimental_updates: value });
+      runCheck();
+    } catch (err) {
+      setExperimental(!value);
+      setSettingError(err instanceof Error ? err.message : "Could not save the setting.");
+    }
+  };
+
+  const error = settingError ?? networkError ?? check?.error ?? applyError;
   const status = checking
     ? "Checking for updates…"
     : applyStatus?.phase === "error"
@@ -28,7 +52,7 @@ export function UpdatesPanel({
       <CardHeader>
         <CardTitle>Updates</CardTitle>
         <CardDescription>
-          Check for new versions and install updates from GitHub releases.
+          Check for new versions and install updates from GitHub releases, or opt in to experimental builds.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -71,15 +95,30 @@ export function UpdatesPanel({
           )}
         </div>
 
+        <CheckField
+          label="Experimental builds"
+          checked={experimental}
+          onChange={(v) => void toggleExperimental(v)}
+          disabled={applying}
+          hint="Get the latest changes on the production branch before they are released. These builds can be unstable. An official release that is newer always replaces them."
+          tooltip="Updates to a rolling pre-release rebuilt on every push to production."
+        />
+
         <UpdateProgress applyStatus={applyStatus} applying={applying} />
 
         {check && (
           <p className="text-sm text-muted-foreground">
             Installed version: <span className="font-medium text-foreground">v{check.current_version}</span>
+            {check.current_version.includes("-exp.") && (
+              <span className="ml-1.5 inline-flex items-center gap-1 text-xs">
+                <FlaskConical className="h-3.5 w-3.5" />
+                Experimental
+              </span>
+            )}
             {check.latest_version && (
               <>
                 {" "}
-                — Latest release:{" "}
+                — {check.experimental ? "Latest experimental build" : "Latest release"}:{" "}
                 <span className="font-medium text-foreground">v{check.latest_version}</span>
               </>
             )}

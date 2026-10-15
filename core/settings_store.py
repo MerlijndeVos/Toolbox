@@ -19,6 +19,8 @@ _DEFAULTS: dict[str, Any] = {
     "syntax_code": True,
     "syntax_logs": True,
     "syntax_scheme": "theme",
+    # Offer the rolling experimental build of the production branch as an update.
+    "experimental_updates": False,
 }
 
 

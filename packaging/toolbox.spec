@@ -35,10 +35,10 @@ if ICON_DIR.is_dir():
     datas.append((str(ICON_DIR), "packaging/icons"))
 _bundled_version_file = REPO_ROOT / "packaging" / ".bundled-version"
 with (REPO_ROOT / "pyproject.toml").open("rb") as _pf:
-    _bundled_version_file.write_text(
-        tomllib.load(_pf)["project"]["version"] + "\n",
-        encoding="utf-8",
-    )
+    _pyproject_version = tomllib.load(_pf)["project"]["version"]
+# Experimental builds set TOOLBOX_BUNDLED_VERSION (e.g. 3.6.0-exp.3e0bc3f) so the app knows what it is.
+_bundled_version = os.environ.get("TOOLBOX_BUNDLED_VERSION", "").strip() or _pyproject_version
+_bundled_version_file.write_text(_bundled_version + "\n", encoding="utf-8")
 datas.append((str(_bundled_version_file), "."))
 # Built-in features are mods: a mod.toml + main.py per folder, loaded from files at runtime.
 # (Their imports are bundled through the hidden imports below.)

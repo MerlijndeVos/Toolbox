@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import platform
+import re
 import subprocess
 import sys
 import threading
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Callable, Literal
 
 from .runtime import app_data_dir, is_frozen
+from .settings_store import load_settings
 from .version import app_version, normalize_version
 
 logger = logging.getLogger(__name__)
@@ -23,6 +25,10 @@ logger = logging.getLogger(__name__)
 GITHUB_REPO = "MerlijndeVos/Toolbox"
 GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
 GITHUB_LATEST = f"{GITHUB_API}/releases/latest"
+# Rolling pre-release rebuilt from the production branch on every push (see experimental.yml).
+EXPERIMENTAL_TAG = "experimental"
+GITHUB_EXPERIMENTAL = f"{GITHUB_API}/releases/tags/{EXPERIMENTAL_TAG}"
+_BUILD_MARKER = re.compile(r"build:\s*(\S+)")
 USER_AGENT = "Toolbox-updater"
 
 UpdatePhase = Literal["idle", "downloading", "installing", "error"]
@@ -82,12 +88,20 @@ def _parse_version(raw: str) -> tuple[int, int, int]:
     return parts[0], parts[1], parts[2]
 
 
+def is_experimental_version(version: str) -> bool:
+    return "-exp." in normalize_version(version)
+
+
 def _is_newer(latest: str, current: str) -> bool:
-    return _parse_version(latest) > _parse_version(current)
+    latest_key, current_key = _parse_version(latest), _parse_version(current)
+    if latest_key != current_key:
+        return latest_key > current_key
+    # X.Y.Z-exp.<sha> is the production branch on top of release X.Y.Z, so it is ahead of it.
+    return is_experimental_version(latest) and not is_experimental_version(current)
 
 
 def _versions_equal(left: str, right: str) -> bool:
-    return _parse_version(left) == _parse_version(right)
+    return normalize_version(left) == normalize_version(right)
 
 
 def _linux_arch() -> str:
@@ -171,6 +185,7 @@ class UpdateInfo:
     release_notes: str | None
     error: str | None = None
     status_message: str | None = None
+    experimental: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -184,6 +199,7 @@ class UpdateInfo:
             "release_notes": self.release_notes,
             "error": self.error,
             "status_message": self.status_message,
+            "experimental": self.experimental,
         }
 
 
@@ -195,9 +211,56 @@ def _base_info(current: str, can_install: bool) -> dict:
     }
 
 
+def _experimental_info(current: str, can_install: bool, timeout: float) -> UpdateInfo | None:
+    """The rolling experimental pre-release, or None when it is missing or unusable."""
+    status, payload, _ = _github_get(GITHUB_EXPERIMENTAL, timeout)
+    if status != 200 or not payload:
+        return None
+    body = str(payload.get("body") or "")
+    marker = _BUILD_MARKER.search(body)
+    if not marker:
+        return None
+    version = normalize_version(marker.group(1))
+    asset = _pick_asset(list(payload.get("assets") or []))
+    download_url = _asset_download_url(asset) if asset else None
+    update_available = bool(
+        download_url and not _versions_equal(version, current) and not _is_newer(current, version)
+    )
+    return UpdateInfo(
+        current_version=current,
+        latest_version=version,
+        update_available=update_available,
+        can_install=can_install,
+        download_url=download_url,
+        asset_name=str(asset.get("name")) if asset else None,
+        release_url=str(payload.get("html_url") or f"https://github.com/{GITHUB_REPO}/releases"),
+        release_notes=body.strip() or None,
+        status_message=None if update_available else "You're on the latest experimental build.",
+        experimental=True,
+    )
+
+
 def check_for_update(timeout: float = 15.0) -> UpdateInfo:
     current = app_version()
     can_install = is_frozen()
+    official = _check_official(current, can_install, timeout)
+    if not load_settings().get("experimental_updates"):
+        return official
+
+    experimental = _experimental_info(current, can_install, timeout)
+    if experimental is None:
+        return official
+    # An official release at or past the experimental base always wins, so nobody is left behind.
+    experimental_key = _parse_version(experimental.latest_version or "")
+    official_key = _parse_version(official.latest_version or "0")
+    if official.latest_version and official_key > experimental_key:
+        return official
+    if _parse_version(current) > experimental_key:
+        return official
+    return experimental
+
+
+def _check_official(current: str, can_install: bool, timeout: float) -> UpdateInfo:
 
     status, payload, err_body = _github_get(GITHUB_LATEST, timeout)
     if status != 200 or not payload:

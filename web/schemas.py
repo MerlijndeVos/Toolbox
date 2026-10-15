@@ -210,6 +210,7 @@ class UpdateCheckResponse(BaseModel):
     release_notes: Optional[str] = None
     error: Optional[str] = None
     status_message: Optional[str] = None
+    experimental: bool = False
 
 
 class UpdateApplyResponse(BaseModel):
@@ -334,6 +335,8 @@ class SettingsResponse(BaseModel):
     syntax_code: bool = True
     syntax_logs: bool = True
     syntax_scheme: SyntaxScheme = "theme"
+    # Offer experimental builds (the latest production commit) as updates.
+    experimental_updates: bool = False
 
 
 class AiProviderUpdate(BaseModel):
@@ -357,6 +360,7 @@ class SettingsUpdateRequest(BaseModel):
     syntax_code: Optional[bool] = None
     syntax_logs: Optional[bool] = None
     syntax_scheme: Optional[SyntaxScheme] = None
+    experimental_updates: Optional[bool] = None
 
 
 class AiTestRequest(AiProviderUpdate):

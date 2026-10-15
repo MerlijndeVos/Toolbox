@@ -190,6 +190,7 @@ def _settings_response() -> SettingsResponse:
         syntax_code=bool(settings.get("syntax_code", True)),
         syntax_logs=bool(settings.get("syntax_logs", True)),
         syntax_scheme=scheme if (scheme := settings.get("syntax_scheme")) in get_args(SyntaxScheme) else "theme",
+        experimental_updates=bool(settings.get("experimental_updates", False)),
     )
 
 
